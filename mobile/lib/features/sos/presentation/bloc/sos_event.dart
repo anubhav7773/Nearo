@@ -1,5 +1,7 @@
 abstract class SosEvent {}
 
+class CheckActiveSos extends SosEvent {}
+
 class TriggerSosBroadcast extends SosEvent {
   final String emergencyType;
   final String? description;
@@ -14,7 +16,11 @@ class TriggerSosBroadcast extends SosEvent {
   });
 }
 
-class CancelActiveSos extends SosEvent {}
+class CancelActiveSos extends SosEvent {
+  final String? eventId;
+
+  CancelActiveSos({this.eventId});
+}
 
 class FetchActiveEmergencyRadius extends SosEvent {
   final double lat;

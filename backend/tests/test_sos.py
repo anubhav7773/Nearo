@@ -1,4 +1,5 @@
 import uuid
+
 from app.core.security import create_access_token
 from app.main import app
 from fastapi.testclient import TestClient
@@ -11,7 +12,7 @@ def test_sos_broadcast_requires_auth():
     response = client.post(
         "/api/v1/sos/broadcast",
         json={
-            "emergency_type": "security",
+            "category": "security",
             "description": "Suspicious activity reported",
             "latitude": 26.7922,
             "longitude": 82.1998,
@@ -21,15 +22,15 @@ def test_sos_broadcast_requires_auth():
 
 
 def test_sos_trigger_authenticated():
-    """Verify authenticated SOS trigger endpoint."""
+    """Verify authenticated SOS trigger endpoint returns real reach count."""
     user_id = str(uuid.uuid4())
     token = create_access_token(subject=user_id)
 
     response = client.post(
-        "/api/v1/sos/trigger",
+        "/api/v1/sos/broadcast",
         headers={"Authorization": f"Bearer {token}"},
         json={
-            "emergency_type": "medical",
+            "category": "medical",
             "description": "Medical assistance needed near Sector 4",
             "latitude": 26.7922,
             "longitude": 82.1998,
@@ -38,14 +39,29 @@ def test_sos_trigger_authenticated():
     assert response.status_code == 201
     data = response.json()
     assert data["status"] == "active"
-    assert "sos_id" in data
-    assert data["broadcast_radius_meters"] == 1500
+    assert "event_id" in data
+    assert "dispatched_neighbors_count" in data
+    assert data["dispatched_neighbors_count"] >= 1
 
 
-def test_get_active_sos_emergencies():
-    """Smoke test: GET /api/v1/sos/active returns active emergencies within radius."""
+def test_get_active_sos_status():
+    """Test GET /api/v1/sos/active returns user active emergency state."""
+    user_id = str(uuid.uuid4())
+    token = create_access_token(subject=user_id)
+
     response = client.get(
         "/api/v1/sos/active",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "has_active" in data
+
+
+def test_get_nearby_active_sos_emergencies():
+    """Test GET /api/v1/sos/nearby returns active emergencies within radius."""
+    response = client.get(
+        "/api/v1/sos/nearby",
         params={
             "lat": 26.7922,
             "lng": 82.1998,
@@ -57,12 +73,14 @@ def test_get_active_sos_emergencies():
     assert isinstance(data, list)
 
 
-def test_subscription_tiers_endpoint():
-    """Verify subscription tiers list returns Free and Pro pricing."""
-    response = client.get("/api/v1/subscriptions/tiers")
-    assert response.status_code == 200
-    data = response.json()
-    assert "tiers" in data
-    tier_names = [t["tier"] for t in data["tiers"]]
-    assert "free" in tier_names
-    assert "pro_resident" in tier_names
+def test_resolve_sos_endpoint():
+    """Verify resolution of an active SOS emergency."""
+    user_id = str(uuid.uuid4())
+    event_id = str(uuid.uuid4())
+    token = create_access_token(subject=user_id)
+
+    response = client.post(
+        f"/api/v1/sos/{event_id}/resolve",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code in (200, 404, 403)

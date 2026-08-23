@@ -59,6 +59,8 @@ class _SosScreenState extends State<SosScreen> with SingleTickerProviderStateMix
   void initState() {
     super.initState();
     _fetchGpsLocation();
+    // Check if user has an existing active emergency
+    context.read<SosBloc>().add(CheckActiveSos());
   }
 
   @override
@@ -131,7 +133,7 @@ class _SosScreenState extends State<SosScreen> with SingleTickerProviderStateMix
   }
 
   void _triggerSos() {
-    HapticFeedback.vibrate();
+    HapticFeedback.heavyImpact();
     setState(() {
       _isHolding = false;
       _holdProgress = 1.0;
@@ -163,7 +165,12 @@ class _SosScreenState extends State<SosScreen> with SingleTickerProviderStateMix
           ),
         ),
       ),
-      body: BlocBuilder<SosBloc, SosState>(
+      body: BlocConsumer<SosBloc, SosState>(
+        listener: (context, state) {
+          if (state is SosActiveState) {
+            HapticFeedback.heavyImpact();
+          }
+        },
         builder: (context, state) {
           return SingleChildScrollView(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
@@ -209,17 +216,24 @@ class _SosScreenState extends State<SosScreen> with SingleTickerProviderStateMix
                           ),
                         ),
                         const SizedBox(height: 12),
-                        ElevatedButton(
+                        ElevatedButton.icon(
                           onPressed: () {
-                            context.read<SosBloc>().add(CancelActiveSos());
+                            context.read<SosBloc>().add(CancelActiveSos(eventId: state.sosId));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Emergency Alert Cancelled. You have marked yourself safe.'),
+                                backgroundColor: AppColors.verifiedGreen,
+                              ),
+                            );
                           },
+                          icon: const Icon(Icons.check_circle_outline, size: 18),
+                          label: const Text('Cancel / I Am Safe'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.surfaceCard,
                             foregroundColor: AppColors.sosRed,
                             side: const BorderSide(color: AppColors.sosRed),
-                            minimumSize: const Size(180, 38),
+                            minimumSize: const Size(180, 40),
                           ),
-                          child: const Text('Cancel / I Am Safe'),
                         ),
                       ],
                     ),

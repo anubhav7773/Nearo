@@ -36,6 +36,8 @@ class ApiEndpoints {
   static const String sosBroadcast = '/sos/broadcast';
   static const String sosTrigger = '/sos/trigger';
   static const String activeSos = '/sos/active';
+  static const String nearbySos = '/sos/nearby';
+  static String resolveSos(String eventId) => '/sos/$eventId/resolve';
 
   // Monetization & Hyperlocal Ads
   static const String verifyPurchase = '/subscriptions/verify-purchase';
