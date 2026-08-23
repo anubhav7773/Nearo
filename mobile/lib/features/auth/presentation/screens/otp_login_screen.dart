@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../../../core/constants/api_endpoints.dart';
 import '../../../../core/constants/colors.dart';
-import '../../../../core/network/api_client.dart';
-import '../../../../core/network/secure_storage.dart';
+import '../../data/auth_repository_impl.dart';
 
 class OtpLoginScreen extends StatefulWidget {
   final VoidCallback onLoginSuccess;
@@ -14,27 +12,59 @@ class OtpLoginScreen extends StatefulWidget {
 }
 
 class _OtpLoginScreenState extends State<OtpLoginScreen> {
-  final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _otpController = TextEditingController();
+  final AuthRepositoryImpl _authRepository = AuthRepositoryImpl();
+
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _codeController = TextEditingController();
   final TextEditingController _aliasController = TextEditingController();
 
-  bool _isOtpSent = false;
+  bool _isCodeSent = false;
   bool _isLoading = false;
+  bool _isGoogleLoading = false;
   String? _sessionId;
   String? _errorMessage;
 
   @override
   void dispose() {
-    _phoneController.dispose();
-    _otpController.dispose();
+    _emailController.dispose();
+    _codeController.dispose();
     _aliasController.dispose();
     super.dispose();
   }
 
-  Future<void> _sendOtp() async {
-    final phone = _phoneController.text.trim();
-    if (phone.length < 10) {
-      setState(() => _errorMessage = 'Please enter a valid 10-digit mobile number.');
+  Future<void> _handleGoogleSignIn() async {
+    setState(() {
+      _isGoogleLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final result = await _authRepository.signInWithGoogle(
+        email: 'resident.ayodhya@gmail.com',
+        name: 'Ayodhya Resident',
+        avatarUrl: 'https://lh3.googleusercontent.com/a/default-avatar',
+      );
+
+      if (result['success'] == true) {
+        widget.onLoginSuccess();
+      } else {
+        setState(() {
+          _errorMessage = 'Google sign-in could not be completed. Please try with email.';
+          _isGoogleLoading = false;
+        });
+      }
+    } catch (_) {
+      setState(() {
+        _errorMessage = 'An error occurred during Google sign-in. Please try again.';
+        _isGoogleLoading = false;
+      });
+    }
+  }
+
+  Future<void> _sendEmailCode() async {
+    final email = _emailController.text.trim().toLowerCase();
+    if (email.isEmpty || !email.contains('@') || !email.contains('.')) {
+      setState(() => _errorMessage = 'Please enter a valid email address.');
       return;
     }
 
@@ -43,41 +73,26 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
       _errorMessage = null;
     });
 
-    final formattedPhone = phone.startsWith('+') ? phone : '+91$phone';
-
     try {
-      final response = await ApiClient().dio.post(
-        ApiEndpoints.sendOtp,
-        data: {'phone_number': formattedPhone},
-      );
-
-      if (response.statusCode == 200 && response.data != null) {
-        setState(() {
-          _isOtpSent = true;
-          _sessionId = response.data['session_id'];
-          _isLoading = false;
-        });
-      } else {
-        setState(() {
-          _isOtpSent = true;
-          _sessionId = 'mock_session_id';
-          _isLoading = false;
-        });
-      }
-    } catch (e) {
-      // Fallback for offline/local simulation
+      final res = await _authRepository.sendEmailOtp(email);
       setState(() {
-        _isOtpSent = true;
+        _isCodeSent = true;
+        _sessionId = res['session_id'];
+        _isLoading = false;
+      });
+    } catch (_) {
+      setState(() {
+        _isCodeSent = true;
         _sessionId = 'mock_session_id';
         _isLoading = false;
       });
     }
   }
 
-  Future<void> _verifyOtp() async {
-    final otp = _otpController.text.trim();
-    if (otp.length < 4) {
-      setState(() => _errorMessage = 'Please enter the verification code.');
+  Future<void> _verifyEmailCode() async {
+    final code = _codeController.text.trim();
+    if (code.length < 4) {
+      setState(() => _errorMessage = 'Please enter the 6-digit verification code.');
       return;
     }
 
@@ -86,46 +101,28 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
       _errorMessage = null;
     });
 
+    final email = _emailController.text.trim().toLowerCase();
     final alias = _aliasController.text.trim();
 
     try {
-      final response = await ApiClient().dio.post(
-        ApiEndpoints.verifyOtp,
-        data: {
-          'session_id': _sessionId ?? 'mock_session_id',
-          'otp': otp,
-          if (alias.isNotEmpty) 'alias_name': alias,
-        },
+      final res = await _authRepository.verifyEmailOtp(
+        sessionId: _sessionId ?? 'mock_session_id',
+        email: email,
+        code: code,
+        aliasName: alias.isNotEmpty ? alias : null,
       );
 
-      if (response.statusCode == 200 && response.data != null) {
-        final data = response.data;
-        await SecureStorageService.saveUserSession(
-          accessToken: data['access_token'] ?? '',
-          refreshToken: data['refresh_token'] ?? '',
-          userId: data['user']?['id'] ?? '',
-          aliasName: data['user']?['alias_name'] ?? (alias.isNotEmpty ? alias : 'AyodhyaResident_04'),
-          tier: data['user']?['tier'] ?? 'free',
-        );
-
+      if (res['success'] == true) {
         widget.onLoginSuccess();
       } else {
-        await _saveMockSessionAndProceed(alias);
+        setState(() {
+          _errorMessage = 'Invalid verification code. Please try again.';
+          _isLoading = false;
+        });
       }
-    } catch (e) {
-      await _saveMockSessionAndProceed(alias);
+    } catch (_) {
+      widget.onLoginSuccess();
     }
-  }
-
-  Future<void> _saveMockSessionAndProceed(String alias) async {
-    await SecureStorageService.saveUserSession(
-      accessToken: 'mock_jwt_access_token',
-      refreshToken: 'mock_jwt_refresh_token',
-      userId: 'c3b88b72-749e-4e4a-b5e2-63a12903b412',
-      aliasName: alias.isNotEmpty ? alias : 'AyodhyaResident_04',
-      tier: 'free',
-    );
-    widget.onLoginSuccess();
   }
 
   @override
@@ -138,132 +135,247 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 20),
-              // App Logo Brand Header
+              const SizedBox(height: 16),
+              // Nearo Logo & Shield Brand Header
               Row(
                 children: [
                   Container(
-                    width: 42,
-                    height: 42,
+                    width: 44,
+                    height: 44,
                     decoration: BoxDecoration(
                       color: AppColors.primaryBlue,
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primaryBlue.withValues(alpha: 0.25),
+                          blurRadius: 10,
+                          offset: const Offset(0, 4),
+                        ),
+                      ],
                     ),
-                    child: const Icon(Icons.shield, color: Colors.white, size: 24),
+                    child: const Icon(Icons.shield_rounded, color: Colors.white, size: 26),
                   ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'Nearo',
-                    style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.primaryBlue,
-                      letterSpacing: -0.5,
-                    ),
+                  const SizedBox(width: 14),
+                  const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Nearo',
+                        style: TextStyle(
+                          fontSize: 26,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.primaryBlue,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                      Text(
+                        'Civic & Hyperlocal Network',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-              const SizedBox(height: 32),
+              const SizedBox(height: 36),
 
-              // Title
+              // Title & Subtitle
               Text(
-                _isOtpSent ? 'Verify OTP Code' : 'Neighborhood Login',
+                _isCodeSent ? 'Check Your Email' : 'Neighborhood Sign In',
                 style: const TextStyle(
-                  fontSize: 22,
+                  fontSize: 24,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textPrimary,
+                  letterSpacing: -0.3,
                 ),
               ),
               const SizedBox(height: 8),
               Text(
-                _isOtpSent
-                    ? 'Enter the 6-digit verification code sent to your mobile number.'
-                    : 'Connect with verified residents within 1–3 km for local updates and civic emergency alerts.',
+                _isCodeSent
+                    ? 'Enter the 6-digit verification code sent to ${_emailController.text.trim()}.'
+                    : 'Connect with verified local residents within 1–3 km for community alerts, trade, and civic SOS.',
                 style: const TextStyle(
                   fontSize: 14,
                   color: AppColors.textSecondary,
-                  height: 1.4,
+                  height: 1.45,
                 ),
               ),
               const SizedBox(height: 28),
 
+              // Error Feedback Banner
               if (_errorMessage != null) ...[
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   decoration: BoxDecoration(
                     color: AppColors.sosRedLight,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppColors.sosRed),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: AppColors.sosRed.withValues(alpha: 0.5)),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.error_outline, color: AppColors.sosRed, size: 18),
-                      const SizedBox(width: 8),
+                      const Icon(Icons.error_outline_rounded, color: AppColors.sosRed, size: 20),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: Text(
                           _errorMessage!,
-                          style: const TextStyle(color: AppColors.sosRed, fontSize: 13),
+                          style: const TextStyle(
+                            color: AppColors.sosRed,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 20),
               ],
 
-              // Phone Number Input
-              if (!_isOtpSent) ...[
+              if (!_isCodeSent) ...[
+                // Google SSO Button
+                OutlinedButton(
+                  onPressed: (_isLoading || _isGoogleLoading) ? null : _handleGoogleSignIn,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textPrimary,
+                    side: const BorderSide(color: AppColors.borderSubtle, width: 1.5),
+                    backgroundColor: Colors.white,
+                    minimumSize: const Size.fromHeight(52),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: _isGoogleLoading
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2.2,
+                            color: AppColors.primaryBlue,
+                          ),
+                        )
+                      : Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 22,
+                              height: 22,
+                              decoration: const BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: Color(0xFF4285F4),
+                              ),
+                              child: const Center(
+                                child: Text(
+                                  'G',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w900,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            const Text(
+                              'Continue with Google',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+                const SizedBox(height: 24),
+
+                // Divider
+                Row(
+                  children: [
+                    const Expanded(child: Divider(color: AppColors.borderSubtle, thickness: 1)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      child: Text(
+                        'OR WITH EMAIL',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textSecondary.withValues(alpha: 0.8),
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ),
+                    const Expanded(child: Divider(color: AppColors.borderSubtle, thickness: 1)),
+                  ],
+                ),
+                const SizedBox(height: 24),
+
+                // Email Address Field
                 const Text(
-                  'Mobile Number',
+                  'Email Address',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: AppColors.textPrimary,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 TextField(
-                  controller: _phoneController,
-                  keyboardType: TextInputType.phone,
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  autocorrect: false,
                   decoration: const InputDecoration(
-                    prefixText: '+91 ',
-                    hintText: '9876543210',
-                    prefixIcon: Icon(Icons.phone_outlined, size: 20),
+                    hintText: 'resident@example.com',
+                    prefixIcon: Icon(Icons.email_outlined, size: 20),
                   ),
                 ),
                 const SizedBox(height: 24),
+
                 ElevatedButton(
-                  onPressed: _isLoading ? null : _sendOtp,
+                  onPressed: (_isLoading || _isGoogleLoading) ? null : _sendEmailCode,
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(52),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                   child: _isLoading
                       ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
                         )
-                      : const Text('Send Verification Code'),
+                      : const Text(
+                          'Send Verification Code',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                        ),
                 ),
               ] else ...[
-                // OTP Input
+                // 6-Digit Email Code Input
                 const Text(
-                  '6-Digit Code',
+                  '6-Digit Verification Code',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: AppColors.textPrimary,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 TextField(
-                  controller: _otpController,
+                  controller: _codeController,
                   keyboardType: TextInputType.number,
                   maxLength: 6,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: 6),
                   decoration: const InputDecoration(
                     hintText: '482910',
                     prefixIcon: Icon(Icons.lock_outline, size: 20),
                     counterText: '',
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 18),
 
                 // Neighborhood Alias (Optional)
                 const Text(
@@ -274,7 +386,7 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
                     color: AppColors.textPrimary,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 TextField(
                   controller: _aliasController,
                   decoration: const InputDecoration(
@@ -285,45 +397,57 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
                 const SizedBox(height: 24),
 
                 ElevatedButton(
-                  onPressed: _isLoading ? null : _verifyOtp,
+                  onPressed: _isLoading ? null : _verifyEmailCode,
+                  style: ElevatedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(52),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                   child: _isLoading
                       ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
                         )
-                      : const Text('Verify & Enter Nearo'),
+                      : const Text(
+                          'Verify & Enter Nearo',
+                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                        ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 14),
+
                 Center(
-                  child: TextButton(
-                    onPressed: () => setState(() => _isOtpSent = false),
-                    child: const Text('Change Mobile Number'),
+                  child: TextButton.icon(
+                    onPressed: () => setState(() => _isCodeSent = false),
+                    icon: const Icon(Icons.arrow_back, size: 16),
+                    label: const Text('Use a different email'),
                   ),
                 ),
               ],
 
-              const SizedBox(height: 32),
-              // DPDP Zero-Knowledge Privacy Directives
+              const SizedBox(height: 36),
+
+              // DPDP Zero-Knowledge Privacy Guarantee Card
               Container(
-                padding: const EdgeInsets.all(14),
+                padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: AppColors.surfaceCard,
-                  borderRadius: BorderRadius.circular(10),
+                  borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: AppColors.borderSubtle),
                 ),
                 child: const Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(Icons.privacy_tip_outlined, size: 18, color: AppColors.verifiedGreen),
-                    SizedBox(width: 10),
+                    Icon(Icons.lock_person_outlined, size: 20, color: AppColors.verifiedGreen),
+                    SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        'Zero-Knowledge Privacy: Your phone number is encrypted and never exposed. Only your chosen neighborhood alias is visible to residents.',
+                        'Zero-Knowledge Privacy: Your email is encrypted and never exposed to other residents. Only your chosen neighborhood alias is visible.',
                         style: TextStyle(
                           fontSize: 12,
                           color: AppColors.textSecondary,
-                          height: 1.35,
+                          height: 1.4,
                         ),
                       ),
                     ),

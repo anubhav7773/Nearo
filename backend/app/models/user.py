@@ -43,7 +43,10 @@ class User(Base):
         default=uuid.uuid4,
         server_default=text("uuid_generate_v4()"),
     )
-    phone_number = Column(String(15), unique=True, nullable=False, index=True)
+    phone_number = Column(String(50), unique=True, nullable=True, index=True)
+    email = Column(String(255), unique=True, nullable=True, index=True)
+    clerk_user_id = Column(String(255), unique=True, nullable=True, index=True)
+    auth_provider = Column(String(50), default="email", nullable=False)
     alias_name = Column(String(50), nullable=False)
     avatar_url = Column(Text, nullable=True)
     role = Column(

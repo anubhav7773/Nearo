@@ -14,6 +14,8 @@ class SecureStorageService {
   static const String _keyRefreshToken = 'jwt_refresh_token';
   static const String _keyUserId = 'user_id';
   static const String _keyAliasName = 'user_alias_name';
+  static const String _keyUserEmail = 'user_email';
+  static const String _keyUserAvatar = 'user_avatar';
   static const String _keyUserTier = 'user_tier';
 
   // Access Token
@@ -41,14 +43,23 @@ class SecureStorageService {
     required String userId,
     required String aliasName,
     required String tier,
+    String? email,
+    String? avatarUrl,
   }) async {
-    await Future.wait([
+    final futures = <Future<void>>[
       _storage.write(key: _keyAccessToken, value: accessToken),
       _storage.write(key: _keyRefreshToken, value: refreshToken),
       _storage.write(key: _keyUserId, value: userId),
       _storage.write(key: _keyAliasName, value: aliasName),
       _storage.write(key: _keyUserTier, value: tier),
-    ]);
+    ];
+    if (email != null) {
+      futures.add(_storage.write(key: _keyUserEmail, value: email));
+    }
+    if (avatarUrl != null) {
+      futures.add(_storage.write(key: _keyUserAvatar, value: avatarUrl));
+    }
+    await Future.wait(futures);
   }
 
   static Future<String?> getUserId() async {
@@ -57,6 +68,14 @@ class SecureStorageService {
 
   static Future<String?> getAliasName() async {
     return await _storage.read(key: _keyAliasName);
+  }
+
+  static Future<String?> getUserEmail() async {
+    return await _storage.read(key: _keyUserEmail);
+  }
+
+  static Future<String?> getUserAvatar() async {
+    return await _storage.read(key: _keyUserAvatar);
   }
 
   static Future<String?> getUserTier() async {

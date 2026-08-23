@@ -9,11 +9,18 @@ class ApiEndpoints {
   static const String clerkPublishableKey =
       'pk_test_dHJ1c3Rpbmctc2F0eXItOTMyMC5jbGVyay5hY2NvdW50cy5kZXYk';
 
-  // Auth Routes
-  static const String sendOtp = '/auth/otp/send';
-  static const String verifyOtp = '/auth/otp/verify';
+  // Email & Google OAuth Routes (Zero-Cost Free Tier)
+  static const String sendEmailCode = '/auth/email/send-code';
+  static const String verifyEmailCode = '/auth/email/verify-code';
+  static const String googleOAuth = '/auth/oauth/google';
+
+  // User Profile & Account
   static const String me = '/auth/me';
   static const String deleteAccount = '/auth/account';
+
+  // Legacy SMS OTP Routes
+  static const String sendOtp = '/auth/otp/send';
+  static const String verifyOtp = '/auth/otp/verify';
 
   // Posts & Feed Routes
   static const String feed = '/posts/feed';
