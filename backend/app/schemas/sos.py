@@ -10,11 +10,13 @@ class SOSCreate(BaseModel):
     category: str | None = Field(None, description="Emergency category: medical, security, fire, scam")
     emergency_type: str | None = Field(None, description="Emergency category alias")
     description: str | None = Field(None, description="Additional context or caller description")
-    latitude: float = Field(..., ge=-90.0, le=90.0)
-    longitude: float = Field(..., ge=-180.0, le=180.0)
+    latitude: float | None = Field(None, ge=-90.0, le=90.0)
+    longitude: float | None = Field(None, ge=-180.0, le=180.0)
+    lat: float | None = Field(None, ge=-90.0, le=90.0, description="Alias for latitude")
+    lng: float | None = Field(None, ge=-180.0, le=180.0, description="Alias for longitude")
 
     @model_validator(mode="after")
-    def validate_category_or_type(self):
+    def validate_fields(self):
         if not self.category and not self.emergency_type:
             self.category = "security"
             self.emergency_type = "security"
@@ -22,6 +24,13 @@ class SOSCreate(BaseModel):
             self.emergency_type = self.category
         elif not self.category and self.emergency_type:
             self.category = self.emergency_type
+
+        if self.latitude is None and self.lat is not None:
+            self.latitude = self.lat
+        if self.longitude is None and self.lng is not None:
+            self.longitude = self.lng
+        if self.latitude is None or self.longitude is None:
+            raise ValueError("Coordinates ('latitude'/'longitude' or 'lat'/'lng') are required.")
         return self
 
 

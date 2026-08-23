@@ -84,3 +84,25 @@ def test_resolve_sos_endpoint():
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code in (200, 404, 403)
+
+
+def test_sos_broadcast_with_lat_lng_aliases():
+    """Verify SOS broadcast works with lat and lng aliases."""
+    user_id = str(uuid.uuid4())
+    token = create_access_token(subject=user_id)
+
+    response = client.post(
+        "/api/v1/sos/broadcast",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "category": "fire",
+            "description": "Short circuit spark in transformer",
+            "lat": 26.7922,
+            "lng": 82.1998,
+        },
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["status"] == "active"
+    assert "event_id" in data
+    assert "dispatched_neighbors_count" in data
