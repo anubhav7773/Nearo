@@ -3,61 +3,66 @@ import logging
 import os
 from typing import Any
 
+import firebase_admin
+from firebase_admin import auth, credentials, messaging
 import jwt
+
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-_firebase_initialized = False
 
-
-def get_firebase_app():
+def init_firebase():
     """Initialize or retrieve the Firebase Admin App instance."""
-    global _firebase_initialized
+    if firebase_admin._apps:
+        return firebase_admin.get_app()
+
+    cred = None
+    service_account_raw = (
+        os.getenv("FIREBASE_SERVICE_ACCOUNT")
+        or getattr(settings, "FIREBASE_SERVICE_ACCOUNT", None)
+        or os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
+        or getattr(settings, "FIREBASE_SERVICE_ACCOUNT_JSON", None)
+        or getattr(settings, "FIREBASE_CREDENTIALS_JSON", None)
+    )
+
+    if service_account_raw:
+        try:
+            cert_dict = json.loads(service_account_raw)
+            cred = credentials.Certificate(cert_dict)
+            logger.info("Parsed Firebase credentials from FIREBASE_SERVICE_ACCOUNT JSON.")
+        except Exception as e:
+            logger.error(
+                "Failed to initialize Firebase from FIREBASE_SERVICE_ACCOUNT: %s",
+                str(e),
+            )
+
+    elif getattr(settings, "FIREBASE_SERVICE_ACCOUNT_PATH", None) and os.path.exists(
+        settings.FIREBASE_SERVICE_ACCOUNT_PATH
+    ):
+        cred = credentials.Certificate(settings.FIREBASE_SERVICE_ACCOUNT_PATH)
+
     try:
-        import firebase_admin
-        from firebase_admin import credentials
-
-        if firebase_admin._apps:
-            return firebase_admin.get_app()
-
-        cred = None
-        service_account_raw = (
-            settings.FIREBASE_SERVICE_ACCOUNT
-            or settings.FIREBASE_SERVICE_ACCOUNT_JSON
-            or settings.FIREBASE_CREDENTIALS_JSON
-            or os.getenv("FIREBASE_SERVICE_ACCOUNT")
-            or os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
-        )
-
-        if service_account_raw:
-            try:
-                cert_dict = json.loads(service_account_raw)
-                cred = credentials.Certificate(cert_dict)
-            except Exception as e:
-                logger.warning("Failed to parse FIREBASE_SERVICE_ACCOUNT JSON: %s", str(e))
-
-        elif settings.FIREBASE_SERVICE_ACCOUNT_PATH and os.path.exists(
-            settings.FIREBASE_SERVICE_ACCOUNT_PATH
-        ):
-            cred = credentials.Certificate(settings.FIREBASE_SERVICE_ACCOUNT_PATH)
-
         if cred:
             app = firebase_admin.initialize_app(cred)
         else:
-            # Initialize with default credentials or project id
-            app = firebase_admin.initialize_app(
-                options={"projectId": settings.FIREBASE_PROJECT_ID or "nearo-org"}
+            project_id = (
+                getattr(settings, "FIREBASE_PROJECT_ID", None)
+                or os.getenv("FIREBASE_PROJECT_ID")
+                or "nearo-org"
             )
-
-        _firebase_initialized = True
+            app = firebase_admin.initialize_app(options={"projectId": project_id})
         logger.info("Firebase Admin initialized successfully.")
         return app
     except Exception as exc:
         logger.warning(
-            "Firebase Admin SDK initialization skipped/deferred: %s", str(exc)
+            "Firebase Admin initialization fallback/skipped: %s", str(exc)
         )
         return None
+
+
+# Backwards compatible alias
+get_firebase_app = init_firebase
 
 
 def verify_firebase_token(token: str) -> dict[str, Any]:
@@ -78,9 +83,7 @@ def verify_firebase_token(token: str) -> dict[str, Any]:
         raise ValueError(f"Token is not a Firebase token: {e}") from e
 
     try:
-        from firebase_admin import auth
-
-        get_firebase_app()
+        init_firebase()
         decoded_token = auth.verify_id_token(token, check_revoked=False)
         return {
             "uid": decoded_token.get("uid"),

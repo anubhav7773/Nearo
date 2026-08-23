@@ -7,12 +7,14 @@ from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.api.v1.router import api_router
 from app.core.config import settings
+from app.core.firebase import init_firebase
 from app.core.redis import close_redis_pool, init_redis_pool
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Lifespan Startup: initialize Redis connection pool
+    # Lifespan Startup: initialize Firebase Admin SDK and Redis connection pool
+    init_firebase()
     await init_redis_pool()
     yield
     # Lifespan Shutdown: gracefully close Redis connections
