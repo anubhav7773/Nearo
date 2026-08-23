@@ -48,8 +48,8 @@ class Settings(BaseSettings):
             f"{self.POSTGRES_SERVER}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
         )
 
-    # Redis / Upstash Cache & Real-time PubSub Broker
-    REDIS_URL: str | None = "redis://localhost:6379/0"
+    # Redis / Upstash Cache & Real-time PubSub Broker (defaults to None with graceful in-memory fallback)
+    REDIS_URL: str | None = None
 
     # CORS Allowed Origins
     BACKEND_CORS_ORIGINS: list[str] | str = [

@@ -8,13 +8,14 @@ class ApiClient {
   factory ApiClient() => _instance;
 
   late final Dio dio;
+  void Function()? onUnauthorized;
 
   ApiClient._internal() {
     dio = Dio(
       BaseOptions(
         baseUrl: ApiEndpoints.baseUrl,
-        connectTimeout: const Duration(seconds: 10),
-        receiveTimeout: const Duration(seconds: 10),
+        connectTimeout: const Duration(seconds: 12),
+        receiveTimeout: const Duration(seconds: 12),
         headers: {
           HttpHeaders.contentTypeHeader: 'application/json',
           HttpHeaders.acceptHeader: 'application/json',
@@ -49,7 +50,7 @@ class ApiClient {
                 if (refreshResponse.statusCode == 200 && refreshResponse.data != null) {
                   final newAccessToken = refreshResponse.data['access_token'];
                   if (newAccessToken != null) {
-                    await SecureStorageService.saveAccessToken(newAccessToken);
+                    await SecureStorageService.saveAccessToken(newAccessToken.toString());
 
                     // Retry original request with new access token
                     final retryOptions = error.requestOptions;
@@ -58,11 +59,12 @@ class ApiClient {
                     return handler.resolve(retryResponse);
                   }
                 }
-              } catch (_) {
-                // If refresh fails, clear invalid session
-                await SecureStorageService.clearSession();
-              }
+              } catch (_) {}
             }
+
+            // If refresh fails or no refresh token, clear invalid session & notify
+            await SecureStorageService.clearSession();
+            onUnauthorized?.call();
           }
           return handler.next(error);
         },

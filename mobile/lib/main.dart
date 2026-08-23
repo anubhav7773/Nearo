@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'core/constants/colors.dart';
+import 'core/network/api_client.dart';
 import 'core/network/secure_storage.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/screens/otp_login_screen.dart';
@@ -30,6 +31,11 @@ class _NearoAppState extends State<NearoApp> {
   @override
   void initState() {
     super.initState();
+    ApiClient().onUnauthorized = () {
+      if (mounted) {
+        setState(() => _isAuthenticated = false);
+      }
+    };
     _checkInitialSession();
   }
 
