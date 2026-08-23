@@ -21,6 +21,11 @@ router = APIRouter()
     summary="Fetch Hyperlocal Radius Feed",
     description="Returns community posts within geographic radius with native ad cards injected at fixed intervals.",
 )
+@router.get(
+    "",
+    response_model=FeedResponse,
+    include_in_schema=False,
+)
 async def get_feed(
     request: Request,
     lat: float | None = Query(None, description="Current user latitude"),

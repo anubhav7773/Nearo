@@ -32,6 +32,22 @@ def test_get_feed_endpoint():
     assert isinstance(data["data"], list)
 
 
+def test_get_posts_endpoint_alias():
+    """Verify GET /api/v1/posts returns the same feed structure."""
+    response = client.get(
+        "/api/v1/posts",
+        params={
+            "lat": 26.7922,
+            "lng": 82.1998,
+            "radius_meters": 1500,
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "data" in data
+    assert isinstance(data["data"], list)
+
+
 def test_coordinate_jitter_anti_triangulation():
     """Verify anti-triangulation spatial jitter stays within 75-125m radius."""
     lat, lon = 26.7922, 82.1998

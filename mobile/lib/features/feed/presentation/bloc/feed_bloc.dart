@@ -2,6 +2,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../../core/constants/api_endpoints.dart';
 import '../../../../core/network/api_client.dart';
+import '../../../../core/utils/geo_utils.dart';
 import '../../data/models/feed_item_model.dart';
 import 'feed_event.dart';
 import 'feed_state.dart';
@@ -57,12 +58,22 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
       }
     }
 
+    // Apply DPDP 200m–500m coordinate jitter for user privacy compliance
+    final jittered = GeoUtils.applyJitter(
+      latitude: lat,
+      longitude: lng,
+      minMeters: 200.0,
+      maxMeters: 500.0,
+    );
+    final queryLat = jittered['latitude'] ?? lat;
+    final queryLng = jittered['longitude'] ?? lng;
+
     try {
       final response = await _apiClient.dio.get(
         ApiEndpoints.feed,
         queryParameters: {
-          'lat': lat,
-          'lng': lng,
+          'lat': queryLat,
+          'lng': queryLng,
           'radius_meters': radius,
           'page': 1,
           'limit': 20,
@@ -96,7 +107,7 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
         emit(FeedError('Failed to fetch neighborhood feed.'));
       }
     } catch (e) {
-      // If error occurs (e.g. offline/mock demo), emit mock data to ensure great visual experience
+      // If error occurs (e.g. offline/mock demo), emit fallback data
       final fallbackItems = _generateFallbackFeed();
       emit(FeedLoaded(
         items: fallbackItems,
@@ -123,7 +134,8 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
     }
   }
 
-  Future<void> _onChangeRadiusFilter(ChangeRadiusFilter event, Emitter<FeedState> emit) async {
+  Future<void> _onChangeRadiusFilter(
+      ChangeRadiusFilter event, Emitter<FeedState> emit) async {
     if (state is FeedLoaded) {
       final current = state as FeedLoaded;
       add(FetchFeed(
@@ -135,7 +147,8 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
     }
   }
 
-  Future<void> _onChangeCategoryFilter(ChangeCategoryFilter event, Emitter<FeedState> emit) async {
+  Future<void> _onChangeCategoryFilter(
+      ChangeCategoryFilter event, Emitter<FeedState> emit) async {
     if (state is FeedLoaded) {
       final current = state as FeedLoaded;
       add(FetchFeed(
@@ -184,7 +197,8 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
         authorAlias: 'Nagarik_99',
         category: 'civic_issue',
         title: 'Sector 4 Water Supply Line Maintenance',
-        content: 'The municipal pipeline repair is currently ongoing near the main gate. Water supply expected to resume by 5 PM.',
+        content:
+            'The municipal pipeline repair is currently ongoing near the main gate. Water supply expected to resume by 5 PM.',
         upvotes: 14,
         commentsCount: 3,
         distanceMeters: 340,
@@ -195,7 +209,8 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
         authorAlias: 'AyodhyaResident_04',
         category: 'alert',
         title: 'Cyber Fraud / Fake Electricity Bill SMS Alert',
-        content: 'Residents received fake SMS asking to call an unknown number for immediate bill payment. Do not click any links or share OTPs!',
+        content:
+            'Residents received fake SMS asking to call an unknown number for immediate bill payment. Do not click any links or share OTPs!',
         upvotes: 28,
         commentsCount: 8,
         distanceMeters: 520,
@@ -206,7 +221,8 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
         authorAlias: 'KalyanSamiti_2',
         category: 'help_needed',
         title: 'Urgent B+ Blood Donor at District Hospital',
-        content: 'Emergency patient admitted in trauma ward. Anyone available near Civil Lines please contact hospital reception directly.',
+        content:
+            'Emergency patient admitted in trauma ward. Anyone available near Civil Lines please contact hospital reception directly.',
         upvotes: 45,
         commentsCount: 12,
         distanceMeters: 750,
@@ -215,7 +231,8 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
       NativeAdItem(
         id: 'ad_1',
         businessName: 'Gupta Diagnostic Center',
-        tagline: 'Special 20% off full body checkups for verified neighborhood residents',
+        tagline:
+            'Special 20% off full body checkups for verified neighborhood residents',
         ctaTitle: 'Chat on WhatsApp',
         whatsappUrl: 'https://wa.me/919876543210?text=Hello%20Nearo%20Offer',
         distanceMeters: 820,
@@ -225,7 +242,8 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
         authorAlias: 'Parihar_Shop',
         category: 'trade',
         title: 'Fresh Organic Mangoes Arrived',
-        content: 'Directly from Malihabad orchard. Available at Shop #12 near Central Mandir.',
+        content:
+            'Directly from Malihabad orchard. Available at Shop #12 near Central Mandir.',
         upvotes: 9,
         commentsCount: 2,
         distanceMeters: 950,

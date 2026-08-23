@@ -1,3 +1,5 @@
+import uuid
+from app.core.security import create_access_token
 from app.main import app
 from fastapi.testclient import TestClient
 
@@ -16,6 +18,28 @@ def test_sos_broadcast_requires_auth():
         },
     )
     assert response.status_code == 401
+
+
+def test_sos_trigger_authenticated():
+    """Verify authenticated SOS trigger endpoint."""
+    user_id = str(uuid.uuid4())
+    token = create_access_token(subject=user_id)
+
+    response = client.post(
+        "/api/v1/sos/trigger",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "emergency_type": "medical",
+            "description": "Medical assistance needed near Sector 4",
+            "latitude": 26.7922,
+            "longitude": 82.1998,
+        },
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["status"] == "active"
+    assert "sos_id" in data
+    assert data["broadcast_radius_meters"] == 1500
 
 
 def test_get_active_sos_emergencies():

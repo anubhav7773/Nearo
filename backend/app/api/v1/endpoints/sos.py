@@ -22,6 +22,12 @@ router = APIRouter()
         "Redis PubSub with a 5-minute cooldown."
     ),
 )
+@router.post(
+    "/trigger",
+    response_model=SOSBroadcastResponse,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
+)
 async def broadcast_sos(
     payload: SOSCreate,
     current_user: User = Depends(get_current_user),

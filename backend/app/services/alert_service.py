@@ -26,7 +26,9 @@ class AlertService:
         point_geom = func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 4326)
 
         # 1. Create SOSEvent record
+        event_id = uuid.uuid4()
         sos_event = SOSEvent(
+            id=event_id,
             triggered_by=user_id,
             emergency_type=emergency_type,
             description=description,
