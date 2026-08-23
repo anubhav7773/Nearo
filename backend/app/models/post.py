@@ -81,3 +81,25 @@ class Post(Base):
     author = relationship("User", back_populates="posts")
 
     __table_args__ = (Index("idx_posts_created_at", created_at.desc()),)
+
+
+class PostUpvote(Base):
+    __tablename__ = "post_upvotes"
+
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    post_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("posts.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (Index("idx_post_upvotes_post_user", post_id, user_id),)

@@ -16,6 +16,7 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
     on<ChangeRadiusFilter>(_onChangeRadiusFilter);
     on<ChangeCategoryFilter>(_onChangeCategoryFilter);
     on<UpvotePost>(_onUpvotePost);
+    on<CreatePostEvent>(_onCreatePost);
   }
 
   Future<Position?> _determinePosition() async {
@@ -69,15 +70,20 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
     final queryLng = jittered['longitude'] ?? lng;
 
     try {
+      final queryParams = <String, dynamic>{
+        'lat': queryLat,
+        'lng': queryLng,
+        'radius_meters': radius,
+        'page': 1,
+        'limit': 20,
+      };
+      if (category != 'all' && category.isNotEmpty) {
+        queryParams['category'] = category;
+      }
+
       final response = await _apiClient.dio.get(
-        ApiEndpoints.feed,
-        queryParameters: {
-          'lat': queryLat,
-          'lng': queryLng,
-          'radius_meters': radius,
-          'page': 1,
-          'limit': 20,
-        },
+        ApiEndpoints.posts,
+        queryParameters: queryParams,
       );
 
       if (response.statusCode == 200 && response.data != null) {
@@ -86,7 +92,7 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
             .map((e) => FeedItem.fromJson(e as Map<String, dynamic>))
             .toList();
 
-        // Apply category filter if active
+        // Client-side fallback filter
         if (category != 'all') {
           items = items.where((item) {
             if (item is CommunityPostItem) {
@@ -160,16 +166,18 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
     }
   }
 
-  void _onUpvotePost(UpvotePost event, Emitter<FeedState> emit) {
+  Future<void> _onUpvotePost(UpvotePost event, Emitter<FeedState> emit) async {
     if (state is FeedLoaded) {
       final current = state as FeedLoaded;
       final updated = current.items.map((item) {
         if (item is CommunityPostItem && item.id == event.postId) {
           final isUpvoted = !item.isUpvoted;
-          final upvotes = isUpvoted ? item.upvotes + 1 : item.upvotes - 1;
+          final upvotes = isUpvoted ? item.upvotes + 1 : (item.upvotes > 0 ? item.upvotes - 1 : 0);
           return CommunityPostItem(
             id: item.id,
             authorAlias: item.authorAlias,
+            authorTier: item.authorTier,
+            authorAvatarUrl: item.authorAvatarUrl,
             category: item.category,
             title: item.title,
             content: item.content,
@@ -181,12 +189,47 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
             mediaUrls: item.mediaUrls,
             createdAt: item.createdAt,
             distanceMeters: item.distanceMeters,
+            distanceText: item.distanceText,
           );
         }
         return item;
       }).toList();
 
       emit(current.copyWith(items: updated));
+
+      // Network sync in background
+      try {
+        await _apiClient.dio.post('${ApiEndpoints.posts}/${event.postId}/upvote');
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _onCreatePost(CreatePostEvent event, Emitter<FeedState> emit) async {
+    try {
+      final jittered = GeoUtils.applyJitter(
+        latitude: event.latitude,
+        longitude: event.longitude,
+        minMeters: 200.0,
+        maxMeters: 500.0,
+      );
+
+      final response = await _apiClient.dio.post(
+        ApiEndpoints.posts,
+        data: {
+          'title': event.title,
+          'content': event.content,
+          'category': event.category,
+          'latitude': jittered['latitude'] ?? event.latitude,
+          'longitude': jittered['longitude'] ?? event.longitude,
+        },
+      );
+
+      if (response.statusCode == 201 || response.statusCode == 200) {
+        add(RefreshFeed());
+      }
+    } catch (_) {
+      // Offline fallback: refresh feed to show latest cached
+      add(RefreshFeed());
     }
   }
 
@@ -202,6 +245,7 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
         upvotes: 14,
         commentsCount: 3,
         distanceMeters: 340,
+        distanceText: '340m away',
         createdAt: DateTime.now().subtract(const Duration(minutes: 12)),
       ),
       CommunityPostItem(
@@ -214,6 +258,7 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
         upvotes: 28,
         commentsCount: 8,
         distanceMeters: 520,
+        distanceText: '520m away',
         createdAt: DateTime.now().subtract(const Duration(hours: 1)),
       ),
       CommunityPostItem(
@@ -226,6 +271,7 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
         upvotes: 45,
         commentsCount: 12,
         distanceMeters: 750,
+        distanceText: '750m away',
         createdAt: DateTime.now().subtract(const Duration(hours: 2)),
       ),
       NativeAdItem(
@@ -236,6 +282,7 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
         ctaTitle: 'Chat on WhatsApp',
         whatsappUrl: 'https://wa.me/919876543210?text=Hello%20Nearo%20Offer',
         distanceMeters: 820,
+        distanceText: '820m away',
       ),
       CommunityPostItem(
         id: 'post_4',
@@ -247,6 +294,7 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
         upvotes: 9,
         commentsCount: 2,
         distanceMeters: 950,
+        distanceText: '950m away',
         createdAt: DateTime.now().subtract(const Duration(hours: 4)),
       ),
     ];

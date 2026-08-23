@@ -112,6 +112,212 @@ class _FeedScreenState extends State<FeedScreen> {
     );
   }
 
+  void _showCreatePostModal(BuildContext context) {
+    final titleController = TextEditingController();
+    final bodyController = TextEditingController();
+    String selectedCategory = 'civic_issue';
+    bool isSubmitting = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (modalCtx) {
+        return StatefulBuilder(
+          builder: (ctx, setModalState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Text(
+                          'New Neighborhood Post',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const Spacer(),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 20),
+                          onPressed: () => Navigator.pop(modalCtx),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Category Selection Chips
+                    const Text(
+                      'Category',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        {'key': 'civic_issue', 'label': 'Civic Issue'},
+                        {'key': 'alert', 'label': 'Scam Alert'},
+                        {'key': 'help_needed', 'label': 'Help Needed'},
+                        {'key': 'trade', 'label': 'Buy & Sell'},
+                        {'key': 'general', 'label': 'General'},
+                      ].map((cat) {
+                        final isSel = cat['key'] == selectedCategory;
+                        return ChoiceChip(
+                          label: Text(cat['label']!),
+                          selected: isSel,
+                          onSelected: (val) {
+                            if (val) setModalState(() => selectedCategory = cat['key']!);
+                          },
+                          selectedColor: AppColors.primaryBlue,
+                          backgroundColor: AppColors.background,
+                          labelStyle: TextStyle(
+                            fontSize: 12,
+                            fontWeight: isSel ? FontWeight.w600 : FontWeight.w500,
+                            color: isSel ? Colors.white : AppColors.textPrimary,
+                          ),
+                          showCheckmark: false,
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Title Input
+                    TextField(
+                      controller: titleController,
+                      decoration: InputDecoration(
+                        labelText: 'Title (Optional)',
+                        hintText: 'e.g. Water Supply Line Repair near Gate 2',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Content / Body Input
+                    TextField(
+                      controller: bodyController,
+                      maxLines: 4,
+                      decoration: InputDecoration(
+                        labelText: 'Description / Message *',
+                        hintText: 'Share relevant details with neighbors in your local radius...',
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                        contentPadding: const EdgeInsets.all(14),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Privacy Jitter Notice
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryBlue.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.security, size: 14, color: AppColors.primaryBlue),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '📍 DPDP Compliant: Location jittered by 200m–500m to protect your exact home address.',
+                              style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Submit Button
+                    SizedBox(
+                      width: double.infinity,
+                      height: 46,
+                      child: ElevatedButton(
+                        onPressed: isSubmitting
+                            ? null
+                            : () async {
+                                final body = bodyController.text.trim();
+                                if (body.isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('Please enter a description.')),
+                                  );
+                                  return;
+                                }
+
+                                setModalState(() => isSubmitting = true);
+
+                                final feedState = context.read<FeedBloc>().state;
+                                double lat = 26.7922;
+                                double lng = 82.1998;
+                                if (feedState is FeedLoaded) {
+                                  lat = feedState.userLat;
+                                  lng = feedState.userLng;
+                                }
+
+                                context.read<FeedBloc>().add(
+                                      CreatePostEvent(
+                                        category: selectedCategory,
+                                        title: titleController.text.trim().isNotEmpty
+                                            ? titleController.text.trim()
+                                            : null,
+                                        content: body,
+                                        latitude: lat,
+                                        longitude: lng,
+                                      ),
+                                    );
+
+                                Navigator.pop(modalCtx);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Neighborhood update published successfully!'),
+                                    backgroundColor: AppColors.verifiedGreen,
+                                  ),
+                                );
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.primaryBlue,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        ),
+                        child: isSubmitting
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                              )
+                            : const Text(
+                                'Publish Update',
+                                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Widget _buildShimmerSkeleton() {
     return ListView.builder(
       padding: const EdgeInsets.all(16),
@@ -325,7 +531,7 @@ class _FeedScreenState extends State<FeedScreen> {
                             ),
                             const SizedBox(height: 16),
                             ElevatedButton.icon(
-                              onPressed: () {},
+                              onPressed: () => _showCreatePostModal(context),
                               icon: const Icon(Icons.add, size: 18),
                               label: const Text('Post Neighborhood Update'),
                               style: ElevatedButton.styleFrom(
@@ -389,7 +595,7 @@ class _FeedScreenState extends State<FeedScreen> {
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {},
+        onPressed: () => _showCreatePostModal(context),
         backgroundColor: AppColors.primaryBlue,
         icon: const Icon(Icons.edit, color: Colors.white, size: 18),
         label: const Text(

@@ -35,7 +35,7 @@ def override_dependencies():
     mock_db.commit.return_value = None
     mock_db.refresh.return_value = None
     mock_db.add = MagicMock()
-    mock_db.delete = MagicMock()
+    mock_db.delete = AsyncMock()
 
     async def _override_get_db():
         yield mock_db

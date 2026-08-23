@@ -2,11 +2,13 @@ abstract class FeedItem {
   final String id;
   final String type;
   final int? distanceMeters;
+  final String? distanceText;
 
   FeedItem({
     required this.id,
     required this.type,
     this.distanceMeters,
+    this.distanceText,
   });
 
   factory FeedItem.fromJson(Map<String, dynamic> json) {
@@ -18,17 +20,22 @@ abstract class FeedItem {
   }
 
   String get distanceFormatted {
+    if (distanceText != null && distanceText!.isNotEmpty) {
+      return distanceText!;
+    }
     if (distanceMeters == null) return 'Nearby';
     if (distanceMeters! < 1000) {
       return '${distanceMeters}m away';
     }
     final km = (distanceMeters! / 1000).toStringAsFixed(1);
-    return '${km}km away';
+    return '$km km away';
   }
 }
 
 class CommunityPostItem extends FeedItem {
   final String authorAlias;
+  final String authorTier;
+  final String? authorAvatarUrl;
   final String category;
   final String? title;
   final String content;
@@ -43,6 +50,8 @@ class CommunityPostItem extends FeedItem {
   CommunityPostItem({
     required super.id,
     required this.authorAlias,
+    this.authorTier = 'free',
+    this.authorAvatarUrl,
     required this.category,
     this.title,
     required this.content,
@@ -54,16 +63,20 @@ class CommunityPostItem extends FeedItem {
     this.mediaUrls = const [],
     required this.createdAt,
     super.distanceMeters,
+    super.distanceText,
   }) : super(type: 'community_post');
 
   factory CommunityPostItem.fromJson(Map<String, dynamic> json) {
     return CommunityPostItem(
       id: json['id'] as String? ?? '',
-      authorAlias: json['author_alias'] as String? ?? 'Neighbor',
+      authorAlias: json['author_alias'] as String? ?? 'Resident',
+      authorTier: json['author_tier'] as String? ?? 'free',
+      authorAvatarUrl: json['author_avatar_url'] as String?,
       category: json['category'] as String? ?? 'general',
       title: json['title'] as String?,
-      content: json['content'] as String? ?? '',
+      content: json['content'] as String? ?? json['body'] as String? ?? '',
       upvotes: json['upvotes'] as int? ?? 0,
+      isUpvoted: json['has_upvoted'] as bool? ?? false,
       commentsCount: json['comments_count'] as int? ?? 0,
       latitude: (json['latitude'] as num?)?.toDouble(),
       longitude: (json['longitude'] as num?)?.toDouble(),
@@ -75,6 +88,7 @@ class CommunityPostItem extends FeedItem {
           ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
           : DateTime.now(),
       distanceMeters: json['distance_meters'] as int?,
+      distanceText: json['distance_text'] as String?,
     );
   }
 
@@ -100,6 +114,7 @@ class NativeAdItem extends FeedItem {
     required this.ctaTitle,
     this.whatsappUrl,
     super.distanceMeters,
+    super.distanceText,
   }) : super(type: 'native_ad');
 
   factory NativeAdItem.fromJson(Map<String, dynamic> json) {
@@ -110,6 +125,7 @@ class NativeAdItem extends FeedItem {
       ctaTitle: json['cta_title'] as String? ?? 'Contact on WhatsApp',
       whatsappUrl: json['whatsapp_url'] as String?,
       distanceMeters: json['distance_meters'] as int?,
+      distanceText: json['distance_text'] as String?,
     );
   }
 }

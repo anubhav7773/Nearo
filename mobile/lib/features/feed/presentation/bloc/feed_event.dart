@@ -28,3 +28,19 @@ class UpvotePost extends FeedEvent {
 
   UpvotePost(this.postId);
 }
+
+class CreatePostEvent extends FeedEvent {
+  final String category;
+  final String? title;
+  final String content;
+  final double latitude;
+  final double longitude;
+
+  CreatePostEvent({
+    required this.category,
+    this.title,
+    required this.content,
+    required this.latitude,
+    required this.longitude,
+  });
+}
