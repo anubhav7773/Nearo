@@ -235,6 +235,13 @@ async def delete_user_account(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    if getattr(current_user, "firebase_uid", None):
+        try:
+            from firebase_admin import auth as fb_auth
+            fb_auth.delete_user(current_user.firebase_uid)
+        except Exception:
+            pass
+
     await db.delete(current_user)
     await db.commit()
 
