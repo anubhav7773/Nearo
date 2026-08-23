@@ -19,6 +19,15 @@ abstract class AuthRepository {
     String? clerkUserId,
   });
 
+  /// Phase 1 Live Profile Sync Endpoint
+  Future<Map<String, dynamic>> syncUserProfile({
+    String? clerkUserId,
+    String? email,
+    String? aliasName,
+    String? avatarUrl,
+    int? preferredRadiusMeters,
+  });
+
   /// Get current resident profile
   Future<Map<String, dynamic>> getCurrentUser();
 

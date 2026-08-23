@@ -14,7 +14,9 @@ class ApiEndpoints {
   static const String verifyEmailCode = '/auth/email/verify-code';
   static const String googleOAuth = '/auth/oauth/google';
 
-  // User Profile & Account
+  // User Profile & Account (Phase 1 Live Sync Pipeline)
+  static const String userSync = '/users/sync';
+  static const String usersMe = '/users/me';
   static const String me = '/auth/me';
   static const String deleteAccount = '/auth/account';
 

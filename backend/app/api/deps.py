@@ -1,4 +1,5 @@
 import logging
+import secrets
 import uuid
 
 import jwt
@@ -65,25 +66,36 @@ async def get_current_user(
 
     # Step 2: Handle Clerk User Provisioning / Resolution
     if is_clerk_token and clerk_claims:
+        clerk_id = clerk_claims.get("sub")
+        email = clerk_claims.get("email")
         phone_number = clerk_claims.get("phone_number")
         alias_name = (
-            clerk_claims.get("alias_name") or f"Resident_{clerk_claims['sub'][-4:]}"
+            clerk_claims.get("alias_name")
+            or (f"Resident_{clerk_id[-4:]}" if clerk_id else f"Resident_{secrets.token_hex(2)}")
         )
 
-        if not phone_number:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Clerk user profile must include a valid mobile phone number",
-            )
+        # Lookup existing user by clerk_user_id, email, or phone number
+        lookup_filters = []
+        if clerk_id:
+            lookup_filters.append(User.clerk_user_id == clerk_id)
+        if email:
+            lookup_filters.append(User.email == email)
+        if phone_number:
+            lookup_filters.append(User.phone_number == phone_number)
 
-        # Lookup existing user by phone number
-        stmt = select(User).where(User.phone_number == phone_number)
-        result = await db.execute(stmt)
-        user = result.scalar_one_or_none()
+        if lookup_filters:
+            from sqlalchemy import or_
+
+            stmt = select(User).where(or_(*lookup_filters))
+            result = await db.execute(stmt)
+            user = result.scalar_one_or_none()
 
         if not user:
             # Auto-provision new resident record in Supabase
             user = User(
+                id=uuid.uuid4(),
+                clerk_user_id=clerk_id,
+                email=email,
                 phone_number=phone_number,
                 alias_name=alias_name,
                 role=UserRole.RESIDENT,
@@ -95,9 +107,18 @@ async def get_current_user(
             await db.commit()
             await db.refresh(user)
         else:
-            # Update verification status
+            # Update fields if new metadata available
+            updated = False
+            if clerk_id and not user.clerk_user_id:
+                user.clerk_user_id = clerk_id
+                updated = True
+            if email and not user.email:
+                user.email = email
+                updated = True
             if not user.is_verified:
                 user.is_verified = True
+                updated = True
+            if updated:
                 await db.commit()
                 await db.refresh(user)
 

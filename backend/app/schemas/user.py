@@ -115,3 +115,26 @@ class UserLocationResponse(BaseModel):
     success: bool = True
     active_radius_meters: int = 1500
     zone_name: str | None = None
+
+
+# Profile Sync Schemas (Phase 1 Live Sync Pipeline)
+class UserProfileSyncRequest(BaseModel):
+    clerk_user_id: str | None = Field(None, description="Clerk User ID")
+    email: str | None = Field(None, description="Resident email address")
+    alias_name: str | None = Field(None, min_length=2, max_length=50, description="Display alias")
+    avatar_url: str | None = Field(None, description="Profile avatar picture URL")
+    preferred_radius_meters: int | None = Field(1500, ge=500, le=5000)
+
+
+class UserProfileResponse(BaseModel):
+    id: uuid.UUID
+    clerk_user_id: str | None = None
+    alias: str
+    email: str | None = None
+    avatar_url: str | None = None
+    radius_km: float = 1.5
+    tier: str = "free"
+    is_verified: bool = True
+    created_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)

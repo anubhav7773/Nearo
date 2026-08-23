@@ -51,6 +51,8 @@ class AuthRepositoryImpl implements AuthRepository {
       if (response.statusCode == 200 && response.data != null) {
         final data = response.data;
         await _saveUserSessionFromResponse(data, fallbackEmail: email, fallbackAlias: aliasName);
+        // Trigger live Phase 1 profile sync
+        await syncUserProfile(email: email, aliasName: aliasName);
         return {'success': true, 'data': data};
       }
     } catch (_) {
@@ -94,6 +96,13 @@ class AuthRepositoryImpl implements AuthRepository {
       if (response.statusCode == 200 && response.data != null) {
         final data = response.data;
         await _saveUserSessionFromResponse(data, fallbackEmail: email, fallbackAlias: name);
+        // Trigger live Phase 1 profile sync
+        await syncUserProfile(
+          clerkUserId: clerkUserId,
+          email: email,
+          aliasName: name,
+          avatarUrl: avatarUrl,
+        );
         return {'success': true, 'data': data};
       }
     } catch (_) {
@@ -114,17 +123,87 @@ class AuthRepositoryImpl implements AuthRepository {
   }
 
   @override
+  Future<Map<String, dynamic>> syncUserProfile({
+    String? clerkUserId,
+    String? email,
+    String? aliasName,
+    String? avatarUrl,
+    int? preferredRadiusMeters,
+  }) async {
+    try {
+      final response = await _apiClient.dio.post(
+        ApiEndpoints.userSync,
+        data: {
+          if (clerkUserId != null) 'clerk_user_id': clerkUserId,
+          if (email != null) 'email': email,
+          if (aliasName != null) 'alias_name': aliasName,
+          if (avatarUrl != null) 'avatar_url': avatarUrl,
+          if (preferredRadiusMeters != null)
+            'preferred_radius_meters': preferredRadiusMeters,
+        },
+      );
+
+      if (response.statusCode == 200 && response.data != null) {
+        final data = response.data;
+        final alias = data['alias'] ?? aliasName;
+        final tier = data['tier'] ?? 'free';
+        final radiusKm = (data['radius_km'] is num)
+            ? (data['radius_km'] as num).toDouble()
+            : 1.5;
+
+        if (alias != null) {
+          await SecureStorageService.saveUserSession(
+            accessToken: await SecureStorageService.getAccessToken() ?? '',
+            refreshToken: await SecureStorageService.getRefreshToken() ?? '',
+            userId: data['id']?.toString() ?? '',
+            aliasName: alias,
+            tier: tier,
+            email: data['email'] ?? email,
+            avatarUrl: data['avatar_url'] ?? avatarUrl,
+          );
+        }
+        await SecureStorageService.saveRadiusKm(radiusKm);
+
+        return {'success': true, 'data': data};
+      }
+    } catch (_) {
+      // Offline fallback
+    }
+    return {'success': true};
+  }
+
+  @override
   Future<Map<String, dynamic>> getCurrentUser() async {
     try {
-      final response = await _apiClient.dio.get(ApiEndpoints.me);
+      final response = await _apiClient.dio.get(ApiEndpoints.usersMe);
       if (response.statusCode == 200 && response.data != null) {
-        return response.data;
+        final data = response.data;
+        if (data['alias'] != null) {
+          await SecureStorageService.updateUserTier(data['tier'] ?? 'free');
+          if (data['radius_km'] is num) {
+            await SecureStorageService.saveRadiusKm(
+              (data['radius_km'] as num).toDouble(),
+            );
+          }
+        }
+        return data;
       }
-    } catch (_) {}
+    } catch (_) {
+      // Try fallback /auth/me
+      try {
+        final authMeRes = await _apiClient.dio.get(ApiEndpoints.me);
+        if (authMeRes.statusCode == 200 && authMeRes.data != null) {
+          return authMeRes.data;
+        }
+      } catch (_) {}
+    }
+
     return {
+      'alias': await SecureStorageService.getAliasName() ?? 'Resident',
       'alias_name': await SecureStorageService.getAliasName() ?? 'Resident',
       'email': await SecureStorageService.getUserEmail(),
       'tier': await SecureStorageService.getUserTier() ?? 'free',
+      'radius_km': await SecureStorageService.getRadiusKm(),
     };
   }
 

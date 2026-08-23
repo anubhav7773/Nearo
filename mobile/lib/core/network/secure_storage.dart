@@ -17,6 +17,7 @@ class SecureStorageService {
   static const String _keyUserEmail = 'user_email';
   static const String _keyUserAvatar = 'user_avatar';
   static const String _keyUserTier = 'user_tier';
+  static const String _keyRadiusKm = 'user_radius_km';
 
   // Access Token
   static Future<void> saveAccessToken(String token) async {
@@ -84,6 +85,15 @@ class SecureStorageService {
 
   static Future<void> updateUserTier(String tier) async {
     await _storage.write(key: _keyUserTier, value: tier);
+  }
+
+  static Future<void> saveRadiusKm(double radiusKm) async {
+    await _storage.write(key: _keyRadiusKm, value: radiusKm.toString());
+  }
+
+  static Future<double> getRadiusKm() async {
+    final val = await _storage.read(key: _keyRadiusKm);
+    return val != null ? (double.tryParse(val) ?? 1.5) : 1.5;
   }
 
   // Clear Session upon Logout or DPDP Account Purge

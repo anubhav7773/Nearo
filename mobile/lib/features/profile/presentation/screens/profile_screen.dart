@@ -3,6 +3,7 @@ import '../../../../core/constants/api_endpoints.dart';
 import '../../../../core/constants/colors.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/network/secure_storage.dart';
+import '../../../auth/data/auth_repository_impl.dart';
 
 class ProfileScreen extends StatefulWidget {
   final VoidCallback onLogout;
@@ -14,6 +15,7 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  final AuthRepositoryImpl _authRepository = AuthRepositoryImpl();
   String _aliasName = 'AyodhyaResident_04';
   String _userTier = 'free';
   double _radiusMeters = 1500;
@@ -26,14 +28,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadProfileData() async {
+    // 1. Instant load from local secure storage
     final alias = await SecureStorageService.getAliasName();
     final tier = await SecureStorageService.getUserTier();
+    final radiusKm = await SecureStorageService.getRadiusKm();
     if (mounted) {
       setState(() {
         if (alias != null) _aliasName = alias;
         if (tier != null) _userTier = tier;
+        _radiusMeters = radiusKm * 1000.0;
       });
     }
+
+    // 2. Fetch live data from backend /users/me
+    try {
+      final liveData = await _authRepository.getCurrentUser();
+      if (mounted && liveData.isNotEmpty) {
+        final liveAlias = liveData['alias'] ?? liveData['alias_name'];
+        final liveTier = liveData['tier'];
+        final liveRadius = liveData['radius_km'];
+
+        setState(() {
+          if (liveAlias != null) _aliasName = liveAlias.toString();
+          if (liveTier != null) _userTier = liveTier.toString();
+          if (liveRadius is num) _radiusMeters = liveRadius.toDouble() * 1000.0;
+        });
+      }
+    } catch (_) {}
   }
 
   Future<void> _upgradeToPro() async {
