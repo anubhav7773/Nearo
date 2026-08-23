@@ -1,0 +1,110 @@
+name: Backend CI / CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'backend/**'
+      - 'docs/**'
+      - '.github/workflows/backend_ci.yml'
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'backend/**'
+      - 'docs/**'
+      - '.github/workflows/backend_ci.yml'
+
+jobs:
+  lint-and-test:
+    name: Lint, Test & Validate
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgis/postgis:16-3.4
+        env:
+          POSTGRES_USER: nearo_user
+          POSTGRES_PASSWORD: nearo_password
+          POSTGRES_DB: nearo_db
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U nearo_user -d nearo_db"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      ENVIRONMENT: test
+      SECRET_KEY: test-secret-key-ci-pipeline-environment
+      POSTGRES_SERVER: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: nearo_user
+      POSTGRES_PASSWORD: nearo_password
+      POSTGRES_DB: nearo_db
+      DATABASE_URL: postgresql+asyncpg://nearo_user:nearo_password@localhost:5432/nearo_db
+      REDIS_URL: redis://localhost:6379/0
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install System Geospatial Libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgeos-dev libpq-dev gdal-bin
+
+      - name: Install Python Dependencies
+        working-directory: ./backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install flake8 black
+
+      - name: Run Code Style & Linter Checks
+        working-directory: ./backend
+        run: |
+          flake8 app tests --count --max-line-length=120 --extend-ignore=E203,W503,F401 --show-source --statistics
+
+      - name: Execute Automated Test Suite
+        working-directory: ./backend
+        run: |
+          pytest -v
+
+  docker-build:
+    name: Build & Verify Docker Image
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Backend Container Image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: false
+          tags: nearo-backend:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

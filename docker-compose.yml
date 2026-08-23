@@ -1,0 +1,105 @@
+# ==============================================================================
+# Nearo Hyperlocal Platform - Production Multi-Container Topology
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. FastAPI Asynchronous Application Gateway
+  # ----------------------------------------------------------------------------
+  app:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: nearo_app
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - PROJECT_NAME=Nearo API
+      - ENVIRONMENT=production
+      - SUBDOMAIN=nearo.asiverticals.me
+      - SECRET_KEY=nearo-insecure-secret-key-change-in-production-dpdp-compliance
+      - ALGORITHM=HS256
+      - ACCESS_TOKEN_EXPIRE_MINUTES=60
+      - REFRESH_TOKEN_EXPIRE_DAYS=30
+      - POSTGRES_SERVER=db
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=nearo_user
+      - POSTGRES_PASSWORD=nearo_password
+      - POSTGRES_DB=nearo_db
+      - DATABASE_URL=postgresql+asyncpg://nearo_user:nearo_password@db:5432/nearo_db
+      - REDIS_URL=redis://redis:6379/0
+      - BACKEND_CORS_ORIGINS=["https://nearo.asiverticals.me","http://localhost:3000"]
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/api/v1/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - nearo_network
+
+  # ----------------------------------------------------------------------------
+  # 2. PostgreSQL 16 with PostGIS 3.4 Spatial Engine
+  # ----------------------------------------------------------------------------
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: nearo_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: nearo_user
+      POSTGRES_PASSWORD: nearo_password
+      POSTGRES_DB: nearo_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docs/02_DATABASE_SCHEMA.sql:/docker-entrypoint-initdb.d/01_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nearo_user -d nearo_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - nearo_network
+
+  # ----------------------------------------------------------------------------
+  # 3. Redis 7 In-Memory Cache & Real-time PubSub Broker
+  # ----------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: nearo_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+    networks:
+      - nearo_network
+
+# ==============================================================================
+# Persistent Named Volumes & Network Definitions
+# ==============================================================================
+volumes:
+  postgres_data:
+    name: nearo_postgres_data
+  redis_data:
+    name: nearo_redis_data
+
+networks:
+  nearo_network:
+    name: nearo_network
+    driver: bridge
