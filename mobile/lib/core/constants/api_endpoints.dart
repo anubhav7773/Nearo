@@ -44,6 +44,10 @@ class ApiEndpoints {
   static const String admobConfig = '/subscriptions/admob-config';
   static const String nearbyAds = '/ads/nearby';
 
+  // Business Directory (Phase 3 Spatial Directory & WhatsApp)
+  static const String directory = '/directory';
+  static const String directoryRegister = '/directory/register';
+
   // Health
   static const String health = '/health';
 }
