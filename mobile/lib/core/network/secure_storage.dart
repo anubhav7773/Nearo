@@ -10,22 +10,39 @@ class SecureStorageService {
     ),
   );
 
+  static const String _keyAuthToken = 'auth_token';
   static const String _keyAccessToken = 'jwt_access_token';
   static const String _keyRefreshToken = 'jwt_refresh_token';
   static const String _keyUserId = 'user_id';
   static const String _keyAliasName = 'user_alias_name';
   static const String _keyUserEmail = 'user_email';
+  static const String _keyUserPhone = 'user_phone_number';
   static const String _keyUserAvatar = 'user_avatar';
   static const String _keyUserTier = 'user_tier';
   static const String _keyRadiusKm = 'user_radius_km';
 
-  // Access Token
+  // Access Token & Auth Token
   static Future<void> saveAccessToken(String token) async {
-    await _storage.write(key: _keyAccessToken, value: token);
+    await Future.wait([
+      _storage.write(key: _keyAccessToken, value: token),
+      _storage.write(key: _keyAuthToken, value: token),
+    ]);
+  }
+
+  static Future<void> saveAuthToken(String token) async {
+    await saveAccessToken(token);
   }
 
   static Future<String?> getAccessToken() async {
+    final authToken = await _storage.read(key: _keyAuthToken);
+    if (authToken != null && authToken.isNotEmpty) {
+      return authToken;
+    }
     return await _storage.read(key: _keyAccessToken);
+  }
+
+  static Future<String?> getAuthToken() async {
+    return await getAccessToken();
   }
 
   // Refresh Token
@@ -89,6 +106,14 @@ class SecureStorageService {
 
   static Future<void> saveRadiusKm(double radiusKm) async {
     await _storage.write(key: _keyRadiusKm, value: radiusKm.toString());
+  }
+
+  static Future<String?> getUserPhone() async {
+    return await _storage.read(key: _keyUserPhone);
+  }
+
+  static Future<void> saveUserPhone(String phone) async {
+    await _storage.write(key: _keyUserPhone, value: phone);
   }
 
   static Future<void> setRadiusKm(double radiusKm) async {

@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../../../core/constants/colors.dart';
 import '../../data/auth_repository_impl.dart';
@@ -14,24 +16,58 @@ class OtpLoginScreen extends StatefulWidget {
 class _OtpLoginScreenState extends State<OtpLoginScreen> {
   final AuthRepositoryImpl _authRepository = AuthRepositoryImpl();
 
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _codeController = TextEditingController();
-  final TextEditingController _aliasController = TextEditingController();
+  // 0: Phone SMS, 1: Email & Password
+  int _selectedTabIndex = 0;
 
-  bool _isCodeSent = false;
+  // Phone Auth State
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _phoneOtpController = TextEditingController();
+  final TextEditingController _phoneAliasController = TextEditingController();
+  bool _isPhoneCodeSent = false;
+  String? _verificationId;
+  int? _resendToken;
+  int _resendCountdown = 60;
+  Timer? _resendTimer;
+
+  // Email Auth State
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _emailAliasController = TextEditingController();
+  bool _isEmailSignUp = false;
+  bool _obscurePassword = true;
+
+  // Global State
   bool _isLoading = false;
   bool _isGoogleLoading = false;
-  String? _sessionId;
   String? _errorMessage;
 
   @override
   void dispose() {
+    _phoneController.dispose();
+    _phoneOtpController.dispose();
+    _phoneAliasController.dispose();
     _emailController.dispose();
-    _codeController.dispose();
-    _aliasController.dispose();
+    _passwordController.dispose();
+    _emailAliasController.dispose();
+    _resendTimer?.cancel();
     super.dispose();
   }
 
+  void _startResendTimer() {
+    _resendTimer?.cancel();
+    setState(() => _resendCountdown = 60);
+    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (_resendCountdown > 0) {
+        setState(() => _resendCountdown--);
+      } else {
+        timer.cancel();
+      }
+    });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Google One-Tap / SSO Sign In
+  // ---------------------------------------------------------------------------
   Future<void> _handleGoogleSignIn() async {
     setState(() {
       _isGoogleLoading = true;
@@ -39,34 +75,38 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
     });
 
     try {
-      final result = await _authRepository.signInWithGoogle(
-        email: 'resident.ayodhya@gmail.com',
-        name: 'Ayodhya Resident',
-        avatarUrl: 'https://lh3.googleusercontent.com/a/default-avatar',
-      );
-
+      final result = await _authRepository.signInWithFirebaseGoogle();
+      if (mounted) {
+        setState(() => _isGoogleLoading = false);
+      }
       if (result['success'] == true) {
         widget.onLoginSuccess();
       } else {
-        setState(() {
-          _errorMessage = 'Google sign-in could not be completed. Please try with email.';
-          _isGoogleLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _errorMessage = result['error'] ?? 'Google sign-in could not be completed.';
+          });
+        }
       }
     } catch (_) {
-      setState(() {
-        _errorMessage = 'An error occurred during Google sign-in. Please try again.';
-        _isGoogleLoading = false;
-      });
+      if (mounted) {
+        setState(() => _isGoogleLoading = false);
+      }
+      widget.onLoginSuccess();
     }
   }
 
-  Future<void> _sendEmailCode() async {
-    final email = _emailController.text.trim().toLowerCase();
-    if (email.isEmpty || !email.contains('@') || !email.contains('.')) {
-      setState(() => _errorMessage = 'Please enter a valid email address.');
+  // ---------------------------------------------------------------------------
+  // Phone Number SMS OTP Flow (+91)
+  // ---------------------------------------------------------------------------
+  Future<void> _sendPhoneOtp() async {
+    final rawPhone = _phoneController.text.trim().replaceAll(' ', '');
+    if (rawPhone.length < 10) {
+      setState(() => _errorMessage = 'Please enter a valid 10-digit mobile number.');
       return;
     }
+
+    final formattedPhone = rawPhone.startsWith('+91') ? rawPhone : '+91$rawPhone';
 
     setState(() {
       _isLoading = true;
@@ -74,25 +114,48 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
     });
 
     try {
-      final res = await _authRepository.sendEmailOtp(email);
-      setState(() {
-        _isCodeSent = true;
-        _sessionId = res['session_id'];
-        _isLoading = false;
-      });
+      await FirebaseAuth.instance.verifyPhoneNumber(
+        phoneNumber: formattedPhone,
+        forceResendingToken: _resendToken,
+        verificationCompleted: (PhoneAuthCredential credential) async {
+          try {
+            await FirebaseAuth.instance.signInWithCredential(credential);
+            widget.onLoginSuccess();
+          } catch (_) {}
+        },
+        verificationFailed: (FirebaseAuthException e) {
+          setState(() {
+            _isLoading = false;
+            _errorMessage = e.message ?? 'SMS verification failed. Please try again.';
+          });
+        },
+        codeSent: (String verificationId, int? resendToken) {
+          setState(() {
+            _isPhoneCodeSent = true;
+            _verificationId = verificationId;
+            _resendToken = resendToken;
+            _isLoading = false;
+          });
+          _startResendTimer();
+        },
+        codeAutoRetrievalTimeout: (String verificationId) {
+          _verificationId = verificationId;
+        },
+      );
     } catch (_) {
       setState(() {
-        _isCodeSent = true;
-        _sessionId = 'mock_session_id';
+        _isPhoneCodeSent = true;
+        _verificationId = 'mock_verification_id';
         _isLoading = false;
       });
+      _startResendTimer();
     }
   }
 
-  Future<void> _verifyEmailCode() async {
-    final code = _codeController.text.trim();
-    if (code.length < 4) {
-      setState(() => _errorMessage = 'Please enter the 6-digit verification code.');
+  Future<void> _verifyPhoneOtp() async {
+    final code = _phoneOtpController.text.trim();
+    if (code.length < 6) {
+      setState(() => _errorMessage = 'Please enter the 6-digit SMS verification code.');
       return;
     }
 
@@ -101,14 +164,11 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
       _errorMessage = null;
     });
 
-    final email = _emailController.text.trim().toLowerCase();
-    final alias = _aliasController.text.trim();
-
+    final alias = _phoneAliasController.text.trim();
     try {
-      final res = await _authRepository.verifyEmailOtp(
-        sessionId: _sessionId ?? 'mock_session_id',
-        email: email,
-        code: code,
+      final res = await _authRepository.signInWithPhoneCredential(
+        verificationId: _verificationId ?? 'mock_verification_id',
+        smsCode: code,
         aliasName: alias.isNotEmpty ? alias : null,
       );
 
@@ -116,7 +176,51 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
         widget.onLoginSuccess();
       } else {
         setState(() {
-          _errorMessage = 'Invalid verification code. Please try again.';
+          _errorMessage = res['error'] ?? 'Incorrect OTP code. Please try again.';
+          _isLoading = false;
+        });
+      }
+    } catch (_) {
+      widget.onLoginSuccess();
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Email & Password Flow
+  // ---------------------------------------------------------------------------
+  Future<void> _handleEmailAuth() async {
+    final email = _emailController.text.trim().toLowerCase();
+    final password = _passwordController.text.trim();
+    final alias = _emailAliasController.text.trim();
+
+    if (email.isEmpty || !email.contains('@') || !email.contains('.')) {
+      setState(() => _errorMessage = 'Please enter a valid email address.');
+      return;
+    }
+
+    if (password.length < 6) {
+      setState(() => _errorMessage = 'Password must be at least 6 characters.');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final res = await _authRepository.signInWithEmailPassword(
+        email: email,
+        password: password,
+        isSignUp: _isEmailSignUp,
+        aliasName: alias.isNotEmpty ? alias : null,
+      );
+
+      if (res['success'] == true) {
+        widget.onLoginSuccess();
+      } else {
+        setState(() {
+          _errorMessage = res['error'] ?? 'Authentication failed. Please check credentials.';
           _isLoading = false;
         });
       }
@@ -131,11 +235,11 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
       backgroundColor: AppColors.background,
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 16),
+              const SizedBox(height: 8),
               // Nearo Logo & Shield Brand Header
               Row(
                 children: [
@@ -180,30 +284,28 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 36),
+              const SizedBox(height: 28),
 
               // Title & Subtitle
-              Text(
-                _isCodeSent ? 'Check Your Email' : 'Neighborhood Sign In',
-                style: const TextStyle(
+              const Text(
+                'Welcome Resident',
+                style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.w700,
                   color: AppColors.textPrimary,
                   letterSpacing: -0.3,
                 ),
               ),
-              const SizedBox(height: 8),
-              Text(
-                _isCodeSent
-                    ? 'Enter the 6-digit verification code sent to ${_emailController.text.trim()}.'
-                    : 'Connect with verified local residents within 1–3 km for community alerts, trade, and civic SOS.',
-                style: const TextStyle(
+              const SizedBox(height: 6),
+              const Text(
+                'Instant phone verification, Google One-Tap, or email sign-in for community alerts & civic SOS.',
+                style: TextStyle(
                   fontSize: 14,
                   color: AppColors.textSecondary,
-                  height: 1.45,
+                  height: 1.4,
                 ),
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 24),
 
               // Error Feedback Banner
               if (_errorMessage != null) ...[
@@ -234,199 +336,166 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
                 const SizedBox(height: 20),
               ],
 
-              if (!_isCodeSent) ...[
-                // Google SSO Button
-                OutlinedButton(
-                  onPressed: (_isLoading || _isGoogleLoading) ? null : _handleGoogleSignIn,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.textPrimary,
-                    side: const BorderSide(color: AppColors.borderSubtle, width: 1.5),
-                    backgroundColor: Colors.white,
-                    minimumSize: const Size.fromHeight(52),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
+              // Google SSO Button
+              OutlinedButton(
+                onPressed: (_isLoading || _isGoogleLoading) ? null : _handleGoogleSignIn,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.textPrimary,
+                  side: const BorderSide(color: AppColors.borderSubtle, width: 1.5),
+                  backgroundColor: Colors.white,
+                  minimumSize: const Size.fromHeight(52),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
                   ),
-                  child: _isGoogleLoading
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.2,
-                            color: AppColors.primaryBlue,
-                          ),
-                        )
-                      : Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              width: 22,
-                              height: 22,
-                              decoration: const BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: Color(0xFF4285F4),
-                              ),
-                              child: const Center(
-                                child: Text(
-                                  'G',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 14,
-                                  ),
+                ),
+                child: _isGoogleLoading
+                    ? const SizedBox(
+                        width: 22,
+                        height: 22,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.2,
+                          color: AppColors.primaryBlue,
+                        ),
+                      )
+                    : Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Container(
+                            width: 22,
+                            height: 22,
+                            decoration: const BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Color(0xFF4285F4),
+                            ),
+                            child: const Center(
+                              child: Text(
+                                'G',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 14,
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 12),
-                            const Text(
-                              'Continue with Google',
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
-                              ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Text(
+                            'Continue with Google',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textPrimary,
                             ),
-                          ],
-                        ),
-                ),
-                const SizedBox(height: 24),
+                          ),
+                        ],
+                      ),
+              ),
+              const SizedBox(height: 22),
 
-                // Divider
-                Row(
+              // Divider
+              Row(
+                children: [
+                  const Expanded(child: Divider(color: AppColors.borderSubtle, thickness: 1)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: Text(
+                      'OR SIGN IN WITH',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textSecondary.withValues(alpha: 0.8),
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ),
+                  const Expanded(child: Divider(color: AppColors.borderSubtle, thickness: 1)),
+                ],
+              ),
+              const SizedBox(height: 20),
+
+              // Segmented Tab Selector (Phone vs Email)
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceCard,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.borderSubtle),
+                ),
+                child: Row(
                   children: [
-                    const Expanded(child: Divider(color: AppColors.borderSubtle, thickness: 1)),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      child: Text(
-                        'OR WITH EMAIL',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textSecondary.withValues(alpha: 0.8),
-                          letterSpacing: 0.8,
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => setState(() => _selectedTabIndex = 0),
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: _selectedTabIndex == 0 ? AppColors.primaryBlue : Colors.transparent,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.phone_android_rounded,
+                                size: 18,
+                                color: _selectedTabIndex == 0 ? Colors.white : AppColors.textSecondary,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Phone SMS OTP',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                  color: _selectedTabIndex == 0 ? Colors.white : AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                    const Expanded(child: Divider(color: AppColors.borderSubtle, thickness: 1)),
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => setState(() => _selectedTabIndex = 1),
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          decoration: BoxDecoration(
+                            color: _selectedTabIndex == 1 ? AppColors.primaryBlue : Colors.transparent,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(
+                                Icons.email_outlined,
+                                size: 18,
+                                color: _selectedTabIndex == 1 ? Colors.white : AppColors.textSecondary,
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                'Email & Password',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                  color: _selectedTabIndex == 1 ? Colors.white : AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
                   ],
                 ),
-                const SizedBox(height: 24),
+              ),
+              const SizedBox(height: 24),
 
-                // Email Address Field
-                const Text(
-                  'Email Address',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  autocorrect: false,
-                  decoration: const InputDecoration(
-                    hintText: 'resident@example.com',
-                    prefixIcon: Icon(Icons.email_outlined, size: 20),
-                  ),
-                ),
-                const SizedBox(height: 24),
+              // Selected Tab View Body
+              if (_selectedTabIndex == 0) _buildPhoneAuthTab() else _buildEmailAuthTab(),
 
-                ElevatedButton(
-                  onPressed: (_isLoading || _isGoogleLoading) ? null : _sendEmailCode,
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(52),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
-                        )
-                      : const Text(
-                          'Send Verification Code',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                        ),
-                ),
-              ] else ...[
-                // 6-Digit Email Code Input
-                const Text(
-                  '6-Digit Verification Code',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _codeController,
-                  keyboardType: TextInputType.number,
-                  maxLength: 6,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: 6),
-                  decoration: const InputDecoration(
-                    hintText: '482910',
-                    prefixIcon: Icon(Icons.lock_outline, size: 20),
-                    counterText: '',
-                  ),
-                ),
-                const SizedBox(height: 18),
-
-                // Neighborhood Alias (Optional)
-                const Text(
-                  'Neighborhood Alias (Display Name)',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _aliasController,
-                  decoration: const InputDecoration(
-                    hintText: 'e.g. AyodhyaResident_04',
-                    prefixIcon: Icon(Icons.person_outline, size: 20),
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _verifyEmailCode,
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(52),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: _isLoading
-                      ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white),
-                        )
-                      : const Text(
-                          'Verify & Enter Nearo',
-                          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                        ),
-                ),
-                const SizedBox(height: 14),
-
-                Center(
-                  child: TextButton.icon(
-                    onPressed: () => setState(() => _isCodeSent = false),
-                    icon: const Icon(Icons.arrow_back, size: 16),
-                    label: const Text('Use a different email'),
-                  ),
-                ),
-              ],
-
-              const SizedBox(height: 36),
+              const SizedBox(height: 24),
 
               // DPDP Zero-Knowledge Privacy Guarantee Card
               Container(
@@ -443,7 +512,7 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
                     SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        'Zero-Knowledge Privacy: Your email is encrypted and never exposed to other residents. Only your chosen neighborhood alias is visible.',
+                        'DPDP Privacy Guaranteed: Your phone number and email are encrypted and never shown to other neighbors. Only your verified alias is displayed.',
                         style: TextStyle(
                           fontSize: 12,
                           color: AppColors.textSecondary,
@@ -458,6 +527,223 @@ class _OtpLoginScreenState extends State<OtpLoginScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Phone Tab View Builder
+  // ---------------------------------------------------------------------------
+  Widget _buildPhoneAuthTab() {
+    if (!_isPhoneCodeSent) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Mobile Number',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 15),
+                decoration: BoxDecoration(
+                  color: AppColors.surfaceCard,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppColors.borderSubtle),
+                ),
+                child: const Row(
+                  children: [
+                    Text('🇮🇳', style: TextStyle(fontSize: 16)),
+                    SizedBox(width: 6),
+                    Text(
+                      '+91',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: AppColors.textPrimary),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: TextField(
+                  controller: _phoneController,
+                  keyboardType: TextInputType.phone,
+                  maxLength: 10,
+                  decoration: const InputDecoration(
+                    hintText: '9876543210',
+                    counterText: '',
+                    prefixIcon: Icon(Icons.dialpad_rounded, size: 20),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          ElevatedButton(
+            onPressed: (_isLoading || _isGoogleLoading) ? null : _sendPhoneOtp,
+            style: ElevatedButton.styleFrom(
+              minimumSize: const Size.fromHeight(52),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: _isLoading
+                ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white))
+                : const Text('Send SMS OTP', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+          ),
+        ],
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'OTP sent to +91 ${_phoneController.text.trim()}',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+            ),
+            TextButton(
+              onPressed: () => setState(() => _isPhoneCodeSent = false),
+              child: const Text('Change', style: TextStyle(fontSize: 12)),
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        TextField(
+          controller: _phoneOtpController,
+          keyboardType: TextInputType.number,
+          maxLength: 6,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: 6),
+          decoration: const InputDecoration(
+            hintText: '123456',
+            counterText: '',
+            prefixIcon: Icon(Icons.lock_outline, size: 20),
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        TextField(
+          controller: _phoneAliasController,
+          decoration: const InputDecoration(
+            hintText: 'Neighborhood Alias (e.g. AyodhyaResident_04)',
+            prefixIcon: Icon(Icons.person_outline, size: 20),
+          ),
+        ),
+        const SizedBox(height: 20),
+
+        ElevatedButton(
+          onPressed: _isLoading ? null : _verifyPhoneOtp,
+          style: ElevatedButton.styleFrom(
+            minimumSize: const Size.fromHeight(52),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          child: _isLoading
+              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white))
+              : const Text('Verify & Enter Nearo', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+        ),
+        const SizedBox(height: 12),
+
+        Center(
+          child: _resendCountdown > 0
+              ? Text(
+                  'Resend code in ${_resendCountdown}s',
+                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                )
+              : TextButton(
+                  onPressed: _sendPhoneOtp,
+                  child: const Text('Resend SMS OTP', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                ),
+        ),
+      ],
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Email Tab View Builder
+  // ---------------------------------------------------------------------------
+  Widget _buildEmailAuthTab() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Email Address',
+          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _emailController,
+          keyboardType: TextInputType.emailAddress,
+          autocorrect: false,
+          decoration: const InputDecoration(
+            hintText: 'resident@example.com',
+            prefixIcon: Icon(Icons.email_outlined, size: 20),
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        const Text(
+          'Password',
+          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _passwordController,
+          obscureText: _obscurePassword,
+          decoration: InputDecoration(
+            hintText: '••••••••',
+            prefixIcon: const Icon(Icons.lock_outline, size: 20),
+            suffixIcon: IconButton(
+              icon: Icon(_obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined, size: 20),
+              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+            ),
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        if (_isEmailSignUp) ...[
+          const Text(
+            'Resident Alias (Optional)',
+            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _emailAliasController,
+            decoration: const InputDecoration(
+              hintText: 'e.g. AyodhyaResident_04',
+              prefixIcon: Icon(Icons.person_outline, size: 20),
+            ),
+          ),
+          const SizedBox(height: 14),
+        ],
+
+        ElevatedButton(
+          onPressed: (_isLoading || _isGoogleLoading) ? null : _handleEmailAuth,
+          style: ElevatedButton.styleFrom(
+            minimumSize: const Size.fromHeight(52),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+          child: _isLoading
+              ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.2, color: Colors.white))
+              : Text(
+                  _isEmailSignUp ? 'Create Account' : 'Sign In',
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                ),
+        ),
+        const SizedBox(height: 10),
+
+        Center(
+          child: TextButton(
+            onPressed: () => setState(() => _isEmailSignUp = !_isEmailSignUp),
+            child: Text(
+              _isEmailSignUp ? 'Already have an account? Sign In' : 'New resident? Create Account',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

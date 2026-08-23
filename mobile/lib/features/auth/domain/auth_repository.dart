@@ -1,5 +1,23 @@
 abstract class AuthRepository {
-  /// Send a 6-digit verification code to the resident email
+  /// Verify phone SMS OTP via Firebase and acquire ID token
+  Future<Map<String, dynamic>> signInWithPhoneCredential({
+    required String verificationId,
+    required String smsCode,
+    String? aliasName,
+  });
+
+  /// Sign in with Google One-Tap / Firebase Google SSO
+  Future<Map<String, dynamic>> signInWithFirebaseGoogle({String? aliasName});
+
+  /// Sign in or register with Email & Password
+  Future<Map<String, dynamic>> signInWithEmailPassword({
+    required String email,
+    required String password,
+    bool isSignUp = false,
+    String? aliasName,
+  });
+
+  /// Send a 6-digit verification code to the resident email (REST fallback)
   Future<Map<String, dynamic>> sendEmailOtp(String email);
 
   /// Verify the 6-digit email code and acquire JWT tokens

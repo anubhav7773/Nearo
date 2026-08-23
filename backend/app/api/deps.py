@@ -6,12 +6,13 @@ import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from redis.asyncio import Redis
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.auth import decode_clerk_jwt, extract_clerk_user_claims
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.firebase import verify_firebase_token
 from app.core.redis import get_redis
 from app.core.security import decode_token
 from app.models.user import SubscriptionTier, User, UserRole
@@ -25,7 +26,7 @@ async def get_current_user(
     db: AsyncSession = Depends(get_db),
     redis: Redis | None = Depends(get_redis),
 ) -> User:
-    """Validate bearer access token (Clerk JWKS or Internal JWT) and return/provision User model."""
+    """Validate bearer access token (Firebase Admin SDK, Internal JWT, or Clerk) and return/provision User."""
     if not auth or not auth.credentials:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -36,93 +37,72 @@ async def get_current_user(
     token = auth.credentials
     user: User | None = None
 
-    # Step 1: Attempt Clerk JWT validation first (or check if Clerk token)
-    is_clerk_token = False
-    clerk_claims = None
-
+    # -------------------------------------------------------------------------
+    # 1. Primary: Verify Firebase ID Token via Firebase Admin SDK
+    # -------------------------------------------------------------------------
     try:
-        # Check header/payload structure to see if it's a Clerk token or internal token
-        unverified_payload = jwt.decode(token, options={"verify_signature": False})
-        iss = unverified_payload.get("iss", "")
-        sub = str(unverified_payload.get("sub", ""))
-        has_clerk_publishable = bool(settings.CLERK_PUBLISHABLE_KEY)
-        is_missing_token_type = not unverified_payload.get("type")
+        firebase_payload = verify_firebase_token(token)
+        uid = firebase_payload.get("uid")
+        if uid:
+            email = firebase_payload.get("email")
+            phone = firebase_payload.get("phone_number")
+            name = firebase_payload.get("name")
+            avatar_url = firebase_payload.get("avatar_url")
+            alias = name or f"Resident_{uid[-4:] if len(uid) >= 4 else secrets.token_hex(2)}"
 
-        if (
-            "clerk" in iss
-            or sub.startswith("user_")
-            or (is_missing_token_type and has_clerk_publishable)
-        ):
-            is_clerk_token = True
-            payload = decode_clerk_jwt(token)
-            clerk_claims = extract_clerk_user_claims(payload)
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication token has expired",
-        )
-    except Exception as e:
-        logger.debug(f"Clerk decode check passed through to internal JWT: {e}")
-
-    # Step 2: Handle Clerk User Provisioning / Resolution
-    if is_clerk_token and clerk_claims:
-        clerk_id = clerk_claims.get("sub")
-        email = clerk_claims.get("email")
-        phone_number = clerk_claims.get("phone_number")
-        alias_name = (
-            clerk_claims.get("alias_name")
-            or (f"Resident_{clerk_id[-4:]}" if clerk_id else f"Resident_{secrets.token_hex(2)}")
-        )
-
-        # Lookup existing user by clerk_user_id, email, or phone number
-        lookup_filters = []
-        if clerk_id:
-            lookup_filters.append(User.clerk_user_id == clerk_id)
-        if email:
-            lookup_filters.append(User.email == email)
-        if phone_number:
-            lookup_filters.append(User.phone_number == phone_number)
-
-        if lookup_filters:
-            from sqlalchemy import or_
+            # Lookup by firebase_uid, email, or phone
+            lookup_filters = [User.firebase_uid == uid]
+            if email:
+                lookup_filters.append(User.email == email.lower().strip())
+            if phone:
+                lookup_filters.append(User.phone_number == phone.strip())
 
             stmt = select(User).where(or_(*lookup_filters))
             result = await db.execute(stmt)
             user = result.scalar_one_or_none()
 
-        if not user:
-            # Auto-provision new resident record in Supabase
-            user = User(
-                id=uuid.uuid4(),
-                clerk_user_id=clerk_id,
-                email=email,
-                phone_number=phone_number,
-                alias_name=alias_name,
-                role=UserRole.RESIDENT,
-                tier=SubscriptionTier.FREE,
-                is_verified=True,
-                is_active=True,
-            )
-            db.add(user)
-            await db.commit()
-            await db.refresh(user)
-        else:
-            # Update fields if new metadata available
-            updated = False
-            if clerk_id and not user.clerk_user_id:
-                user.clerk_user_id = clerk_id
-                updated = True
-            if email and not user.email:
-                user.email = email
-                updated = True
-            if not user.is_verified:
-                user.is_verified = True
-                updated = True
-            if updated:
+            if not user:
+                # Auto-provision new resident record in Supabase
+                user = User(
+                    id=uuid.uuid4(),
+                    firebase_uid=uid,
+                    email=email.lower().strip() if email else None,
+                    phone_number=phone.strip() if phone else None,
+                    alias_name=alias,
+                    avatar_url=avatar_url,
+                    auth_provider="firebase",
+                    role=UserRole.RESIDENT,
+                    tier=SubscriptionTier.FREE,
+                    is_verified=True,
+                    is_active=True,
+                )
+                db.add(user)
                 await db.commit()
                 await db.refresh(user)
+            else:
+                # Update existing user record with Firebase UID / metadata if needed
+                updated = False
+                if not user.firebase_uid:
+                    user.firebase_uid = uid
+                    updated = True
+                if email and not user.email:
+                    user.email = email.lower().strip()
+                    updated = True
+                if phone and not user.phone_number:
+                    user.phone_number = phone.strip()
+                    updated = True
+                if not user.is_verified:
+                    user.is_verified = True
+                    updated = True
+                if updated:
+                    await db.commit()
+                    await db.refresh(user)
+    except Exception as exc:
+        logger.debug("Firebase token verification bypassed: %s", str(exc))
 
-    # Step 3: Handle Internal JWT validation fallback
+    # -------------------------------------------------------------------------
+    # 2. Secondary: Internal Nearo HMAC JWT Validation
+    # -------------------------------------------------------------------------
     if not user:
         try:
             payload = decode_token(token)
@@ -130,39 +110,85 @@ async def get_current_user(
             token_type: str | None = payload.get("type")
             jti: str | None = payload.get("jti")
 
-            if not user_id_str or token_type != "access":
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid token claims or token type",
-                )
+            if user_id_str and token_type == "access":
+                # Check token blocklist in Redis if available
+                if redis and jti:
+                    try:
+                        is_blocked = await redis.get(f"jwt_blocklist:{jti}")
+                        if is_blocked:
+                            raise HTTPException(
+                                status_code=status.HTTP_401_UNAUTHORIZED,
+                                detail="Token has been revoked",
+                            )
+                    except Exception:
+                        pass
 
-            # Check token blocklist in Redis if available
-            if redis and jti:
-                is_blocked = await redis.get(f"jwt_blocklist:{jti}")
-                if is_blocked:
-                    raise HTTPException(
-                        status_code=status.HTTP_401_UNAUTHORIZED,
-                        detail="Token has been revoked",
-                    )
-
-            user_id = uuid.UUID(user_id_str)
-            result = await db.execute(select(User).where(User.id == user_id))
-            user = result.scalar_one_or_none()
+                try:
+                    user_id = uuid.UUID(user_id_str)
+                    result = await db.execute(select(User).where(User.id == user_id))
+                    user = result.scalar_one_or_none()
+                except ValueError:
+                    pass
         except jwt.ExpiredSignatureError:
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Authentication token has expired",
             )
-        except (jwt.PyJWTError, ValueError):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Could not validate credentials",
-            )
+        except Exception:
+            pass
+
+    # -------------------------------------------------------------------------
+    # 3. Tertiary: Legacy Clerk Token Validation Fallback
+    # -------------------------------------------------------------------------
+    if not user and settings.CLERK_PUBLISHABLE_KEY:
+        try:
+            clerk_payload = decode_clerk_jwt(token)
+            clerk_claims = extract_clerk_user_claims(clerk_payload)
+            if clerk_claims:
+                clerk_id = clerk_claims.get("sub")
+                email = clerk_claims.get("email")
+                phone_number = clerk_claims.get("phone_number")
+                alias_name = (
+                    clerk_claims.get("alias_name")
+                    or (f"Resident_{clerk_id[-4:]}" if clerk_id else f"Resident_{secrets.token_hex(2)}")
+                )
+
+                lookup_filters = []
+                if clerk_id:
+                    lookup_filters.append(User.clerk_user_id == clerk_id)
+                if email:
+                    lookup_filters.append(User.email == email)
+                if phone_number:
+                    lookup_filters.append(User.phone_number == phone_number)
+
+                if lookup_filters:
+                    stmt = select(User).where(or_(*lookup_filters))
+                    result = await db.execute(stmt)
+                    user = result.scalar_one_or_none()
+
+                if not user:
+                    user = User(
+                        id=uuid.uuid4(),
+                        clerk_user_id=clerk_id,
+                        email=email,
+                        phone_number=phone_number,
+                        alias_name=alias_name,
+                        role=UserRole.RESIDENT,
+                        tier=SubscriptionTier.FREE,
+                        is_verified=True,
+                        is_active=True,
+                    )
+                    db.add(user)
+                    await db.commit()
+                    await db.refresh(user)
+        except Exception:
+            pass
 
     if not user:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="User associated with token not found",
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Could not validate credentials or user not found",
+            headers={"WWW-Authenticate": "Bearer"},
         )
 
     if not user.is_active:

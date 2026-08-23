@@ -45,8 +45,9 @@ class User(Base):
     )
     phone_number = Column(String(50), unique=True, nullable=True, index=True)
     email = Column(String(255), unique=True, nullable=True, index=True)
+    firebase_uid = Column(String(255), unique=True, nullable=True, index=True)
     clerk_user_id = Column(String(255), unique=True, nullable=True, index=True)
-    auth_provider = Column(String(50), default="email", nullable=False)
+    auth_provider = Column(String(50), default="firebase", nullable=False)
     alias_name = Column(String(50), nullable=False)
     avatar_url = Column(Text, nullable=True)
     role = Column(
