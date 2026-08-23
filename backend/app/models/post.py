@@ -44,6 +44,7 @@ class Post(Base):
         nullable=False,
         index=True,
     )
+    user_id = Column(UUID(as_uuid=True), nullable=True, index=True)
     category = Column(
         Enum(
             PostCategory,

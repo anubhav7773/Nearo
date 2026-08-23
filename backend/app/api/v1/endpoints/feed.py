@@ -1,9 +1,10 @@
+import logging
 import uuid
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from redis.asyncio import Redis
-from sqlalchemy import func, select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_current_user_optional
@@ -20,6 +21,7 @@ from app.schemas.post import (
 from app.services.ad_engine import AdEngine
 from app.services.geo_service import GeoService
 
+logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
@@ -40,7 +42,7 @@ async def get_feed(
     lat: float | None = Query(None, description="Current user latitude"),
     lng: float | None = Query(None, description="Current user longitude"),
     radius_meters: int = Query(
-        1500, ge=500, le=5000, description="Search radius in meters"
+        1500, ge=500, le=10000, description="Search radius in meters"
     ),
     category: str | None = Query(None, description="Optional category filter"),
     page: int = Query(1, ge=1, description="Page number"),
@@ -142,37 +144,62 @@ async def create_post(
                 detail="Post creation limit reached (maximum 10 posts per hour).",
             )
 
-    # 2. Insert Post with Point geometry
     content_text = payload.content or payload.body or ""
-    point_geom = func.ST_SetSRID(
-        func.ST_MakePoint(payload.longitude, payload.latitude), 4326
+    title_text = payload.title or (content_text[:40] if content_text else "Local Update")
+    lat = payload.latitude or payload.lat or 26.7922
+    lng = payload.longitude or payload.lng or 82.1998
+    cat_val = (
+        payload.category.value
+        if hasattr(payload.category, "value")
+        else str(payload.category).lower().replace(" ", "_")
     )
-    new_post = Post(
-        id=uuid.uuid4(),
-        author_id=current_user.id,
-        category=payload.category,
-        title=payload.title,
-        content=content_text,
-        media_urls=payload.media_urls,
-        location=point_geom,
-        is_pinned=False,
-        upvotes_count=0,
-        comments_count=0,
-    )
-    db.add(new_post)
-    await db.commit()
-    await db.refresh(new_post)
-    created_at_val = (
-        new_post.created_at
-        if hasattr(new_post, "created_at") and isinstance(new_post.created_at, datetime)
-        else None
-    )
+    post_id = uuid.uuid4()
 
-    return PostCreateResponse(
-        id=new_post.id,
-        status="published",
-        created_at=created_at_val,
-    )
+    try:
+        sql = """
+            INSERT INTO public.posts (
+                id, user_id, author_id, title, content, body, category,
+                location, media_urls, is_pinned, is_verified, upvotes_count, comments_count,
+                created_at, updated_at
+            ) VALUES (
+                :id, :user_id, :author_id, :title, :content, :body, :category,
+                ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
+                :media_urls, false, false, 0, 0,
+                NOW(), NOW()
+            )
+            RETURNING id, created_at;
+        """
+        params = {
+            "id": post_id,
+            "user_id": current_user.id,
+            "author_id": current_user.id,
+            "title": title_text,
+            "content": content_text,
+            "body": content_text,
+            "category": cat_val,
+            "lat": lat,
+            "lng": lng,
+            "media_urls": payload.media_urls or [],
+        }
+        res = await db.execute(text(sql), params)
+        await db.commit()
+        row = res.mappings().first()
+        created_at_val = (
+            row["created_at"] if row and "created_at" in row else datetime.now()
+        )
+
+        return PostCreateResponse(
+            id=row["id"] if row and "id" in row else post_id,
+            status="published",
+            created_at=created_at_val,
+        )
+    except Exception as err:
+        await db.rollback()
+        logger.error("Post creation failed: %s", str(err))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create post: {str(err)}",
+        )
 
 
 @router.post(
@@ -186,54 +213,64 @@ async def toggle_post_upvote(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # 1. Fetch target post
-    post_stmt = select(Post).where(Post.id == post_id)
-    post_res = await db.execute(post_stmt)
-    post = post_res.scalar_one_or_none()
+    try:
+        # 1. Fetch target post
+        post_stmt = select(Post).where(Post.id == post_id)
+        post_res = await db.execute(post_stmt)
+        post = post_res.scalar_one_or_none()
 
-    if not post:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Post not found",
+        if not post:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Post not found",
+            )
+
+        # 2. Check if user already upvoted
+        upvote_stmt = select(PostUpvote).where(
+            PostUpvote.user_id == current_user.id,
+            PostUpvote.post_id == post_id,
         )
+        upvote_res = await db.execute(upvote_stmt)
+        existing_upvote = upvote_res.scalar_one_or_none()
 
-    # 2. Check if user already upvoted
-    upvote_stmt = select(PostUpvote).where(
-        PostUpvote.user_id == current_user.id,
-        PostUpvote.post_id == post_id,
-    )
-    upvote_res = await db.execute(upvote_stmt)
-    existing_upvote = upvote_res.scalar_one_or_none()
+        current_count = getattr(post, "upvotes_count", 0) or 0
 
-    current_count = getattr(post, "upvotes_count", 0) or 0
+        if existing_upvote:
+            # Toggle off / remove upvote
+            del_res = db.delete(existing_upvote)
+            if hasattr(del_res, "__await__"):
+                await del_res
+            new_count = max(0, current_count - 1)
+            if hasattr(post, "upvotes_count"):
+                post.upvotes_count = new_count
+            has_upvoted = False
+        else:
+            # Toggle on / add upvote
+            new_upvote = PostUpvote(
+                user_id=current_user.id,
+                post_id=post_id,
+            )
+            db.add(new_upvote)
+            new_count = current_count + 1
+            if hasattr(post, "upvotes_count"):
+                post.upvotes_count = new_count
+            has_upvoted = True
 
-    if existing_upvote:
-        # Toggle off / remove upvote
-        del_res = db.delete(existing_upvote)
-        if hasattr(del_res, "__await__"):
-            await del_res
-        new_count = max(0, current_count - 1)
-        if hasattr(post, "upvotes_count"):
-            post.upvotes_count = new_count
-        has_upvoted = False
-    else:
-        # Toggle on / add upvote
-        new_upvote = PostUpvote(
-            user_id=current_user.id,
+        await db.commit()
+        await db.refresh(post)
+
+        return PostUpvoteResponse(
+            success=True,
             post_id=post_id,
+            upvotes_count=new_count,
+            has_upvoted=has_upvoted,
         )
-        db.add(new_upvote)
-        new_count = current_count + 1
-        if hasattr(post, "upvotes_count"):
-            post.upvotes_count = new_count
-        has_upvoted = True
-
-    await db.commit()
-    await db.refresh(post)
-
-    return PostUpvoteResponse(
-        success=True,
-        post_id=post_id,
-        upvotes_count=new_count,
-        has_upvoted=has_upvoted,
-    )
+    except HTTPException:
+        raise
+    except Exception as err:
+        await db.rollback()
+        logger.error("Upvote toggle error: %s", str(err))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to toggle upvote: {str(err)}",
+        )

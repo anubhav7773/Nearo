@@ -2,7 +2,7 @@ import math
 import random
 import uuid
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.post import Post
@@ -99,9 +99,9 @@ class GeoService:
             func.cast(point_geom, text("geography")),
         ).label("distance_meters")
 
-        # Extract raw coordinates for jittering
-        raw_lat = func.ST_Y(Post.location).label("raw_lat")
-        raw_lon = func.ST_X(Post.location).label("raw_lon")
+        # Extract raw coordinates for jittering (cast to geometry for ST_X/ST_Y)
+        raw_lat = func.ST_Y(func.cast(Post.location, text("geometry"))).label("raw_lat")
+        raw_lon = func.ST_X(func.cast(Post.location, text("geometry"))).label("raw_lon")
 
         # Base query joining author to retrieve profile metadata
         where_conditions = [
@@ -142,7 +142,7 @@ class GeoService:
                 raw_lat,
                 raw_lon,
             )
-            .join(User, Post.author_id == User.id)
+            .outerjoin(User, or_(Post.author_id == User.id, Post.user_id == User.id))
             .where(*where_conditions)
         )
 
@@ -175,7 +175,9 @@ class GeoService:
         post_responses: list[PostResponse] = []
         for post, alias_name, tier, avatar_url, distance, r_lat, r_lon in rows:
             # Apply anti-triangulation Gaussian coordinate jitter
-            j_lat, j_lon = apply_coordinate_jitter(float(r_lat), float(r_lon))
+            lat_val = float(r_lat) if r_lat is not None else latitude
+            lon_val = float(r_lon) if r_lon is not None else longitude
+            j_lat, j_lon = apply_coordinate_jitter(lat_val, lon_val)
             dist_int = int(distance) if distance is not None else None
 
             # Calculate human-readable distance text
@@ -201,7 +203,7 @@ class GeoService:
                         else str(post.category)
                     ),
                     title=post.title,
-                    content=post.content,
+                    content=post.content or getattr(post, "body", "") or "",
                     distance_meters=dist_int,
                     distance_text=distance_text,
                     upvotes=post.upvotes_count,
