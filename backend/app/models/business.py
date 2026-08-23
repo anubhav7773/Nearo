@@ -1,6 +1,6 @@
 import uuid
 
-from geoalchemy2 import Geometry
+from geoalchemy2 import Geography, Geometry
 from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, String, Text, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -29,7 +29,7 @@ class Business(Base):
     description = Column(Text, nullable=True)
     whatsapp_number = Column(String(20), nullable=False)
     location = Column(
-        Geometry(geometry_type="POINT", srid=4326, spatial_index=True),
+        Geography(geometry_type="POINT", srid=4326, spatial_index=True),
         nullable=False,
     )
     is_verified = Column(Boolean, default=False, nullable=False)

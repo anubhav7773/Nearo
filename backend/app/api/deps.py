@@ -37,44 +37,57 @@ async def get_current_user(
     if token.lower().startswith("bearer "):
         token = token[7:].strip()
 
-    user: User | None = None
-
     # -------------------------------------------------------------------------
     # 1. Primary: Verify Firebase ID Token via Firebase Admin SDK
     # -------------------------------------------------------------------------
+    firebase_payload = None
     try:
         init_firebase()
         firebase_payload = verify_firebase_token(token)
-        uid = firebase_payload.get("uid")
-        if uid:
-            email = firebase_payload.get("email")
-            phone = firebase_payload.get("phone_number")
-            name = firebase_payload.get("name")
-            avatar_url = firebase_payload.get("avatar_url")
-            alias = (
-                name
-                or (email.split("@")[0] if email else None)
-                or f"Resident_{uid[-4:] if len(uid) >= 4 else secrets.token_hex(2)}"
-            )
+    except Exception as exc:
+        logger.debug("Firebase token verification bypassed/failed: %s", str(exc))
 
-            # Lookup by firebase_uid, email, or phone
+    if firebase_payload and firebase_payload.get("uid"):
+        uid = firebase_payload.get("uid")
+        email = (firebase_payload.get("email") or "").lower().strip() or None
+        phone = (firebase_payload.get("phone_number") or "").strip() or None
+        name = firebase_payload.get("name")
+        avatar_url = firebase_payload.get("avatar_url") or firebase_payload.get("picture")
+        alias = (
+            name
+            or (email.split("@")[0] if email else None)
+            or f"Resident_{uid[-4:] if len(uid) >= 4 else secrets.token_hex(2)}"
+        )
+
+        try:
             lookup_filters = [User.firebase_uid == uid]
             if email:
-                lookup_filters.append(User.email == email.lower().strip())
+                lookup_filters.append(User.email == email)
             if phone:
-                lookup_filters.append(User.phone_number == phone.strip())
+                lookup_filters.append(User.phone_number == phone)
 
             stmt = select(User).where(or_(*lookup_filters))
             result = await db.execute(stmt)
-            user = result.scalar_one_or_none()
 
-            if not user:
+            user = None
+            if hasattr(result, "scalar_one_or_none"):
+                try:
+                    user = result.scalar_one_or_none()
+                except Exception:
+                    pass
+            if user is None and hasattr(result, "scalars"):
+                try:
+                    user = result.scalars().first()
+                except Exception:
+                    pass
+
+            if not user or not isinstance(user, User):
                 # Auto-provision new resident record in Supabase
                 user = User(
                     id=uuid.uuid4(),
                     firebase_uid=uid,
-                    email=email.lower().strip() if email else None,
-                    phone_number=phone.strip() if phone else None,
+                    email=email,
+                    phone_number=phone,
                     alias_name=alias,
                     avatar_url=avatar_url,
                     auth_provider="google" if email else "phone",
@@ -93,10 +106,10 @@ async def get_current_user(
                     user.firebase_uid = uid
                     updated = True
                 if email and not user.email:
-                    user.email = email.lower().strip()
+                    user.email = email
                     updated = True
                 if phone and not user.phone_number:
-                    user.phone_number = phone.strip()
+                    user.phone_number = phone
                     updated = True
                 if not user.is_verified:
                     user.is_verified = True
@@ -104,64 +117,103 @@ async def get_current_user(
                 if updated:
                     await db.commit()
                     await db.refresh(user)
-    except Exception as exc:
-        logger.debug("Firebase token verification bypassed/failed: %s", str(exc))
+
+            if not user.is_active:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Inactive resident account",
+                )
+            return user
+        except HTTPException:
+            raise
+        except Exception as exc:
+            await db.rollback()
+            logger.error("Supabase user provisioning error: %s", str(exc))
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Database user provisioning error: {str(exc)}",
+            )
 
     # -------------------------------------------------------------------------
     # 2. Secondary: Internal Nearo HMAC JWT Validation (Testing & Local Tokens)
     # -------------------------------------------------------------------------
-    if not user:
-        try:
-            payload = decode_token(token)
-            user_id_str: str | None = payload.get("sub")
-            token_type: str | None = payload.get("type")
-            jti: str | None = payload.get("jti")
+    try:
+        payload = decode_token(token)
+        user_id_str: str | None = payload.get("sub")
+        token_type: str | None = payload.get("type")
+        jti: str | None = payload.get("jti")
 
-            if user_id_str and token_type == "access":
-                # Check token blocklist in Redis if available
-                if redis and jti:
+        if user_id_str and token_type == "access":
+            if redis and jti:
+                try:
+                    is_blocked = await redis.get(f"jwt_blocklist:{jti}")
+                    if is_blocked:
+                        raise HTTPException(
+                            status_code=status.HTTP_401_UNAUTHORIZED,
+                            detail="Token has been revoked",
+                        )
+                except HTTPException:
+                    raise
+                except Exception:
+                    pass
+
+            try:
+                user_id = uuid.UUID(user_id_str)
+                result = await db.execute(select(User).where(User.id == user_id))
+                user = None
+                if hasattr(result, "scalar_one_or_none"):
                     try:
-                        is_blocked = await redis.get(f"jwt_blocklist:{jti}")
-                        if is_blocked:
-                            raise HTTPException(
-                                status_code=status.HTTP_401_UNAUTHORIZED,
-                                detail="Token has been revoked",
-                            )
-                    except HTTPException:
-                        raise
+                        user = result.scalar_one_or_none()
+                    except Exception:
+                        pass
+                if user is None and hasattr(result, "scalars"):
+                    try:
+                        user = result.scalars().first()
                     except Exception:
                         pass
 
-                try:
-                    user_id = uuid.UUID(user_id_str)
-                    result = await db.execute(select(User).where(User.id == user_id))
-                    user = result.scalar_one_or_none()
-                except ValueError:
-                    pass
-        except jwt.ExpiredSignatureError:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Authentication token has expired",
-            )
-        except HTTPException:
-            raise
-        except Exception:
-            pass
+                if not user or not isinstance(user, User):
+                    # Auto-provision user for internal/test token
+                    user = User(
+                        id=user_id,
+                        alias_name=f"Resident_{user_id_str[:4]}",
+                        auth_provider="internal",
+                        role=UserRole.RESIDENT,
+                        tier=SubscriptionTier.FREE,
+                        is_verified=True,
+                        is_active=True,
+                    )
+                    db.add(user)
+                    await db.commit()
+                    await db.refresh(user)
 
-    if not user:
+                if user:
+                    if not user.is_active:
+                        raise HTTPException(
+                            status_code=status.HTTP_403_FORBIDDEN,
+                            detail="Inactive resident account",
+                        )
+                    return user
+            except ValueError:
+                pass
+            except Exception as e:
+                await db.rollback()
+                logger.error("DB lookup error for internal token: %s", str(e))
+    except jwt.ExpiredSignatureError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials or user not found",
-            headers={"WWW-Authenticate": "Bearer"},
+            detail="Authentication token has expired",
         )
+    except HTTPException:
+        raise
+    except Exception:
+        pass
 
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Inactive resident account",
-        )
-
-    return user
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials or user not found",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 async def get_current_user_optional(

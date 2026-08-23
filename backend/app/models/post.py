@@ -1,7 +1,7 @@
 import enum
 import uuid
 
-from geoalchemy2 import Geometry
+from geoalchemy2 import Geography, Geometry
 from sqlalchemy import (
     Boolean,
     Column,
@@ -59,7 +59,7 @@ class Post(Base):
     content = Column(Text, nullable=False)
     media_urls = Column(ARRAY(Text), server_default="{}", default=list, nullable=False)
     location = Column(
-        Geometry(geometry_type="POINT", srid=4326, spatial_index=True),
+        Geography(geometry_type="POINT", srid=4326, spatial_index=True),
         nullable=False,
     )
     is_pinned = Column(Boolean, default=False, nullable=False)
