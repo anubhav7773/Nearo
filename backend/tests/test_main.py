@@ -4,24 +4,37 @@ from fastapi.testclient import TestClient
 client = TestClient(app)
 
 
-def test_root_endpoint():
-    """Test root / endpoint for uptime monitoring."""
-    response = client.get("/")
-    assert response.status_code == 200
-    data = response.json()
+def test_root_endpoint_get_and_head():
+    """Test root / endpoint for GET and HEAD requests for UptimeRobot monitoring."""
+    # GET request
+    response_get = client.get("/")
+    assert response_get.status_code == 200
+    data = response_get.json()
     assert data["status"] == "healthy"
     assert "service" in data
 
+    # HEAD request (used by UptimeRobot free tier)
+    response_head = client.head("/")
+    assert response_head.status_code == 200
 
-def test_health_endpoint():
-    """Test /health and /api/v1/health endpoints."""
-    response = client.get("/health")
-    assert response.status_code == 200
-    assert response.json()["status"] == "healthy"
 
-    response_v1 = client.get("/api/v1/health")
-    assert response_v1.status_code == 200
-    assert response_v1.json()["status"] == "healthy"
+def test_health_endpoint_get_and_head():
+    """Test /health and /api/v1/health endpoints for GET and HEAD requests."""
+    # /health
+    response_health_get = client.get("/health")
+    assert response_health_get.status_code == 200
+    assert response_health_get.json()["status"] == "healthy"
+
+    response_health_head = client.head("/health")
+    assert response_health_head.status_code == 200
+
+    # /api/v1/health
+    response_v1_get = client.get("/api/v1/health")
+    assert response_v1_get.status_code == 200
+    assert response_v1_get.json()["status"] == "healthy"
+
+    response_v1_head = client.head("/api/v1/health")
+    assert response_v1_head.status_code == 200
 
 
 def test_docs_and_openapi_endpoints():

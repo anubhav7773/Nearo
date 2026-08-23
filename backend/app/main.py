@@ -95,8 +95,9 @@ async def global_exception_handler(request: Request, exc: Exception):
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
 
-# Root Health & Info Endpoint (for Uptime pinging / root checks)
+# Root Health & Info Endpoint (supports GET and HEAD for UptimeRobot / Uptime pingers)
 @app.get("/", tags=["Health"])
+@app.head("/", include_in_schema=False)
 async def root():
     return {
         "status": "healthy",
@@ -105,9 +106,11 @@ async def root():
     }
 
 
-# Health Check Endpoints
+# Health Check Endpoints (supports GET and HEAD)
 @app.get("/health", tags=["Health"])
+@app.head("/health", include_in_schema=False)
 @app.get(f"{settings.API_V1_STR}/health", tags=["Health"])
+@app.head(f"{settings.API_V1_STR}/health", include_in_schema=False)
 async def health_check():
     return {
         "status": "healthy",
