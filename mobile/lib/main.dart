@@ -1,3 +1,4 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'core/constants/colors.dart';
@@ -12,8 +13,11 @@ import 'features/profile/presentation/screens/profile_screen.dart';
 import 'features/sos/presentation/bloc/sos_bloc.dart';
 import 'features/sos/presentation/screens/sos_screen.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  try {
+    await Firebase.initializeApp();
+  } catch (_) {}
   runApp(const NearoApp());
 }
 
