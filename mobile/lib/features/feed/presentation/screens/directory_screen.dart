@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/constants/api_endpoints.dart';
 import '../../../../core/constants/colors.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/utils/geo_utils.dart';
+import '../../../../core/utils/whatsapp_launcher.dart';
 
 class DirectoryScreen extends StatefulWidget {
   const DirectoryScreen({super.key});
@@ -80,10 +80,9 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
       }
     } catch (_) {}
 
-    // Fallback if offline
     if (mounted) {
       setState(() {
-        _businesses = _getFallbackBusinesses();
+        _businesses = [];
         _isLoading = false;
       });
     }
@@ -111,43 +110,21 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
   }
 
   Future<void> _launchWhatsApp(String rawPhone, String businessName) async {
-    // Format clean digits with country code
-    String cleanDigits = rawPhone.replaceAll(RegExp(r'[^0-9]'), '');
-    if (cleanDigits.length == 10) {
-      cleanDigits = '91$cleanDigits';
-    }
-
-    final message = Uri.encodeComponent(
-      'Hello I found your listing on Nearo',
-    );
-
-    final nativeUri = Uri.parse('whatsapp://send?phone=$cleanDigits&text=$message');
-    final webUri = Uri.parse('https://wa.me/$cleanDigits?text=$message');
-
     try {
-      final launched = await launchUrl(nativeUri, mode: LaunchMode.externalApplication);
-      if (!launched) {
-        final webLaunched = await launchUrl(webUri, mode: LaunchMode.externalApplication);
-        if (!webLaunched && mounted) {
-          _showWhatsAppErrorSnackBar();
-        }
-      }
+      await openWhatsAppChat(
+        phoneNumber: rawPhone,
+        message: 'Hello I found your listing on Nearo',
+      );
     } catch (_) {
-      try {
-        await launchUrl(webUri, mode: LaunchMode.externalApplication);
-      } catch (_) {
-        if (mounted) _showWhatsAppErrorSnackBar();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not open WhatsApp. Please verify WhatsApp is installed on your device.'),
+            backgroundColor: AppColors.sosRed,
+          ),
+        );
       }
     }
-  }
-
-  void _showWhatsAppErrorSnackBar() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Could not open WhatsApp. Please verify WhatsApp is installed on your device.'),
-        backgroundColor: AppColors.sosRed,
-      ),
-    );
   }
 
   void _showRegisterBusinessModal() {
@@ -419,13 +396,19 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
                             const Icon(Icons.storefront_outlined, size: 48, color: AppColors.textMuted),
                             const SizedBox(height: 12),
                             const Text(
-                              'No businesses listed in this category yet.',
+                              'No local businesses listed in this radius yet.',
                               style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
                             ),
+                            const SizedBox(height: 6),
+                            const Text(
+                              'Be the first to list yours!',
+                              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
+                            ),
                             const SizedBox(height: 16),
-                            ElevatedButton(
+                            ElevatedButton.icon(
                               onPressed: _showRegisterBusinessModal,
-                              child: const Text('List Your Business'),
+                              icon: const Icon(Icons.add, size: 18),
+                              label: const Text('List Your Business'),
                             ),
                           ],
                         ),
@@ -551,34 +534,5 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
         ),
       ),
     );
-  }
-
-  List<Map<String, dynamic>> _getFallbackBusinesses() {
-    return [
-      {
-        'name': 'Gupta Diagnostic Center',
-        'category': 'healthcare',
-        'distance_text': '320m away',
-        'is_verified': true,
-        'description': 'Complete blood tests, thyroid profiling, and home sample collection across Ayodhya central.',
-        'whatsapp_number': '+919876543210',
-      },
-      {
-        'name': 'Awadh Daily Fresh Mart',
-        'category': 'grocery',
-        'distance_text': '540m away',
-        'is_verified': true,
-        'description': 'Farm-fresh local vegetables, fruits, dairy, and pure desi ghee delivered in 30 minutes.',
-        'whatsapp_number': '+919812345678',
-      },
-      {
-        'name': 'Shukla Plumbing & Electrician Works',
-        'category': 'home_services',
-        'distance_text': '850m away',
-        'is_verified': true,
-        'description': 'Licensed emergency plumbing, wiring repair, RO water purifier service, and AC installation.',
-        'whatsapp_number': '+919765432109',
-      },
-    ];
   }
 }
