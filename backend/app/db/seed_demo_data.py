@@ -3,7 +3,9 @@ import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+
 from sqlalchemy import func, select, text
+
 from app.core.config import settings
 from app.core.database import AsyncSessionLocal, engine
 from app.models.ad import AdType, LocalAd, Subscription
@@ -147,7 +149,10 @@ async def seed_data():
                 users[0].id,
                 PostCategory.ALERT,
                 "Cyber Scam: Fake Electricity Bill Disconnection SMS",
-                "Residents received fraud SMS asking to call an unknown number for immediate bill clearance. Do not share OTPs!",
+                (
+                    "Residents received fraud SMS asking to call an unknown number "
+                    "for immediate bill clearance. Do not share OTPs!"
+                ),
                 (0.0005, 0.0008),
                 28,
                 8,
@@ -157,7 +162,10 @@ async def seed_data():
                 users[2].id,
                 PostCategory.HELP_NEEDED,
                 "Urgent B+ Blood Donor Needed at District Hospital",
-                "Emergency patient admitted in trauma ward. Anyone available near Civil Lines please contact hospital reception directly.",
+                (
+                    "Emergency patient admitted in trauma ward. Anyone available near "
+                    "Civil Lines please contact hospital reception directly."
+                ),
                 (0.0020, -0.0015),
                 45,
                 12,
@@ -167,7 +175,10 @@ async def seed_data():
                 users[1].id,
                 PostCategory.CIVIC_ISSUE,
                 "Streetlights Malfunctioning on Bypass Road",
-                "3 consecutive solar streetlights are flickering on Bypass Marg. Reported to municipal board ticket #AY8821.",
+                (
+                    "3 consecutive solar streetlights are flickering on Bypass Marg. "
+                    "Reported to municipal board ticket #AY8821."
+                ),
                 (-0.0018, 0.0025),
                 8,
                 1,
@@ -235,7 +246,16 @@ async def seed_data():
             ),
         ]
 
-        for author_id, cat, title, content, offset, upvotes, comments, pinned in posts_data:
+        for (
+            author_id,
+            cat,
+            title,
+            content,
+            offset,
+            upvotes,
+            comments,
+            pinned,
+        ) in posts_data:
             post = Post(
                 author_id=author_id,
                 category=cat,
@@ -264,7 +284,9 @@ async def seed_data():
                 tagline="Special 20% off comprehensive health checkups for verified neighborhood residents.",
                 cta_title="Chat on WhatsApp",
                 whatsapp_number="+919876543213",
-                target_center=func.ST_SetSRID(func.ST_MakePoint(82.1998, 26.7922), 4326),
+                target_center=func.ST_SetSRID(
+                    func.ST_MakePoint(82.1998, 26.7922), 4326
+                ),
                 target_radius_meters=3000,
                 is_active=True,
                 impressions_count=142,
@@ -279,7 +301,9 @@ async def seed_data():
                 tagline="Emergency home wiring repair, inverter maintenance, and rooftop solar installation.",
                 cta_title="Contact on WhatsApp",
                 whatsapp_number="+919876543214",
-                target_center=func.ST_SetSRID(func.ST_MakePoint(82.2010, 26.7930), 4326),
+                target_center=func.ST_SetSRID(
+                    func.ST_MakePoint(82.2010, 26.7930), 4326
+                ),
                 target_radius_meters=3000,
                 is_active=True,
                 impressions_count=98,

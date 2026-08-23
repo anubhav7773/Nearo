@@ -1,5 +1,7 @@
 import enum
 import uuid
+
+from geoalchemy2 import Geometry
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
@@ -7,7 +9,6 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
-    Index,
     Integer,
     String,
     Text,
@@ -16,7 +17,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from geoalchemy2 import Geometry
+
 from app.core.database import Base
 
 
@@ -46,18 +47,30 @@ class User(Base):
     alias_name = Column(String(50), nullable=False)
     avatar_url = Column(Text, nullable=True)
     role = Column(
-        Enum(UserRole, name="user_role", native_enum=True, values_callable=lambda obj: [e.value for e in obj]),
+        Enum(
+            UserRole,
+            name="user_role",
+            native_enum=True,
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
         default=UserRole.RESIDENT,
         nullable=False,
     )
     tier = Column(
-        Enum(SubscriptionTier, name="subscription_tier", native_enum=True, values_callable=lambda obj: [e.value for e in obj]),
+        Enum(
+            SubscriptionTier,
+            name="subscription_tier",
+            native_enum=True,
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
         default=SubscriptionTier.FREE,
         nullable=False,
     )
     is_verified = Column(Boolean, default=False, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    created_at = Column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
     updated_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),

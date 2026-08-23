@@ -1,6 +1,7 @@
 import secrets
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -72,7 +73,9 @@ async def create_subscription_order(
         order_id=order_id,
         amount_inr=float(total_amount),
         currency="INR",
-        tier=payload.tier.value if hasattr(payload.tier, "value") else str(payload.tier),
+        tier=(
+            payload.tier.value if hasattr(payload.tier, "value") else str(payload.tier)
+        ),
         starts_at=subscription.starts_at,
         expires_at=subscription.expires_at,
     )
@@ -164,17 +167,29 @@ async def get_subscription_tiers():
             {
                 "tier": SubscriptionTier.FREE.value,
                 "price_monthly_inr": 0.00,
-                "features": ["Hyperlocal radius feed", "Civic SOS broadcasts", "Local comments & upvotes"],
+                "features": [
+                    "Hyperlocal radius feed",
+                    "Civic SOS broadcasts",
+                    "Local comments & upvotes",
+                ],
             },
             {
                 "tier": SubscriptionTier.PRO_RESIDENT.value,
                 "price_monthly_inr": 29.00,
-                "features": ["100% Ad-free feed", "Verified resident badge", "Priority SOS notifications"],
+                "features": [
+                    "100% Ad-free feed",
+                    "Verified resident badge",
+                    "Priority SOS notifications",
+                ],
             },
             {
                 "tier": SubscriptionTier.BUSINESS_PRO.value,
                 "price_monthly_inr": 499.00,
-                "features": ["Native sponsor ad injection", "WhatsApp direct lead CTA", "Local search priority"],
+                "features": [
+                    "Native sponsor ad injection",
+                    "WhatsApp direct lead CTA",
+                    "Local search priority",
+                ],
             },
         ]
     }

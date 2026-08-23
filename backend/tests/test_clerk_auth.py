@@ -1,5 +1,4 @@
-import jwt
-from app.core.auth import extract_clerk_user_claims, decode_clerk_jwt
+from app.core.auth import extract_clerk_user_claims
 from app.core.config import settings
 
 
@@ -28,6 +27,8 @@ def test_extract_clerk_user_claims_fallback_phone():
 
 
 def test_cors_origin_parser():
-    origins = settings.assemble_cors_origins("http://localhost:3000, https://nearo.asiverticals.me")
+    origins = settings.assemble_cors_origins(
+        "http://localhost:3000, https://nearo.asiverticals.me"
+    )
     assert "http://localhost:3000" in origins
     assert "https://nearo.asiverticals.me" in origins

@@ -4,9 +4,11 @@ import logging
 import os
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional
-from pydantic import BaseModel
+from typing import Any
+
 import httpx
+import jwt
+from pydantic import BaseModel
 
 from app.core.config import settings
 from app.models.user import SubscriptionTier
@@ -17,12 +19,12 @@ logger = logging.getLogger(__name__)
 class GooglePlayPurchaseResult(BaseModel):
     is_valid: bool
     tier: SubscriptionTier
-    order_id: Optional[str] = None
+    order_id: str | None = None
     purchase_state: int = 0  # 0: Purchased, 1: Canceled, 2: Pending
     starts_at: datetime
     expires_at: datetime
     is_acknowledged: bool = True
-    raw_response: Dict[str, Any] = {}
+    raw_response: dict[str, Any] = {}
 
 
 class GooglePlayBillingService:
@@ -30,12 +32,14 @@ class GooglePlayBillingService:
 
     def __init__(
         self,
-        package_name: Optional[str] = None,
-        service_account_json: Optional[str] = None,
+        package_name: str | None = None,
+        service_account_json: str | None = None,
     ):
         self.package_name = package_name or settings.GOOGLE_PLAY_PACKAGE_NAME
-        self.service_account_json = service_account_json or settings.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
-        self._parsed_service_account: Optional[Dict[str, Any]] = None
+        self.service_account_json = (
+            service_account_json or settings.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON
+        )
+        self._parsed_service_account: dict[str, Any] | None = None
         self._load_service_account()
 
     def _load_service_account(self) -> None:
@@ -50,7 +54,7 @@ class GooglePlayBillingService:
                 with open(raw, "r", encoding="utf-8") as f:
                     self._parsed_service_account = json.load(f)
                     return
-            
+
             # 2. Check if Base64 encoded
             try:
                 decoded = base64.b64decode(raw).decode("utf-8")
@@ -80,7 +84,7 @@ class GooglePlayBillingService:
         self,
         purchase_token: str,
         product_id: str,
-        package_name: Optional[str] = None,
+        package_name: str | None = None,
     ) -> GooglePlayPurchaseResult:
         """Verify subscription or one-time in-app product token with Google Play."""
         pkg = package_name or self.package_name
@@ -97,7 +101,11 @@ class GooglePlayBillingService:
             # Deterministic mock order ID from token
             order_id = f"GPA.{int(time.time())}-{hash(purchase_token) % 1000000:06d}"
             # 30-day standard billing cycle for subscriptions
-            duration_days = 365 if "annual" in product_id.lower() or "yearly" in product_id.lower() else 30
+            duration_days = (
+                365
+                if "annual" in product_id.lower() or "yearly" in product_id.lower()
+                else 30
+            )
             expires_utc = now_utc + timedelta(days=duration_days)
 
             return GooglePlayPurchaseResult(
@@ -120,29 +128,28 @@ class GooglePlayBillingService:
         try:
             access_token = await self._get_google_oauth_token()
             headers = {"Authorization": f"Bearer {access_token}"}
-            
+
             # Check subscription endpoint first
             sub_url = (
                 f"https://androidpublisher.googleapis.com/androidpublisher/v3/applications/"
                 f"{pkg}/purchases/subscriptions/{product_id}/tokens/{purchase_token}"
             )
-            
+
             async with httpx.AsyncClient(timeout=10.0) as client:
                 res = await client.get(sub_url, headers=headers)
-                
+
                 if res.status_code == 200:
                     data = res.json()
-                    # Expiry time millis
                     expiry_millis = int(data.get("expiryTimeMillis", 0))
                     expires_utc = (
                         datetime.fromtimestamp(expiry_millis / 1000.0, tz=timezone.utc)
                         if expiry_millis > 0
                         else now_utc + timedelta(days=30)
                     )
-                    
+
                     is_valid = expires_utc > now_utc
                     order_id = data.get("orderId", f"GPA.{int(time.time())}")
-                    
+
                     return GooglePlayPurchaseResult(
                         is_valid=is_valid,
                         tier=tier,
@@ -153,7 +160,7 @@ class GooglePlayBillingService:
                         is_acknowledged=data.get("acknowledgementState", 0) == 1,
                         raw_response=data,
                     )
-                
+
                 # Check one-time in-app product endpoint
                 product_url = (
                     f"https://androidpublisher.googleapis.com/androidpublisher/v3/applications/"
@@ -177,7 +184,9 @@ class GooglePlayBillingService:
                         raw_response=data,
                     )
 
-                logger.error(f"Google Play API verification error {res.status_code}: {res.text}")
+                logger.error(
+                    f"Google Play API verification error {res.status_code}: {res.text}"
+                )
                 return GooglePlayPurchaseResult(
                     is_valid=False,
                     tier=tier,
@@ -208,7 +217,9 @@ class GooglePlayBillingService:
 
         client_email = self._parsed_service_account.get("client_email")
         private_key = self._parsed_service_account.get("private_key")
-        token_uri = self._parsed_service_account.get("token_uri", "https://oauth2.googleapis.com/token")
+        token_uri = self._parsed_service_account.get(
+            "token_uri", "https://oauth2.googleapis.com/token"
+        )
 
         now = int(time.time())
         claims = {
@@ -219,7 +230,6 @@ class GooglePlayBillingService:
             "exp": now + 3600,
         }
 
-        import jwt
         assertion = jwt.encode(claims, private_key, algorithm="RS256")
 
         async with httpx.AsyncClient(timeout=10.0) as client:

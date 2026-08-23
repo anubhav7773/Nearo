@@ -1,9 +1,10 @@
 import math
 import random
 import uuid
-from typing import Any, Dict, List, Optional, Tuple
+
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.models.post import Post
 from app.models.user import User, UserLocation
 from app.schemas.post import PostResponse
@@ -14,7 +15,7 @@ def apply_coordinate_jitter(
     lon: float,
     min_meters: float = 75.0,
     max_meters: float = 125.0,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     """Apply pseudo-random 75-125m Gaussian jitter to prevent resident triangulation (DPDP compliance)."""
     radius_meters = random.uniform(min_meters, max_meters)
     r = radius_meters / 111300.0  # Approximate conversion: meters to degrees
@@ -25,7 +26,9 @@ def apply_coordinate_jitter(
     jitter_lat = w * math.cos(t)
     # Guard against division by zero near poles
     cos_lat = math.cos(math.radians(lat))
-    jitter_lon = (w * math.sin(t)) / cos_lat if abs(cos_lat) > 1e-6 else (w * math.sin(t))
+    jitter_lon = (
+        (w * math.sin(t)) / cos_lat if abs(cos_lat) > 1e-6 else (w * math.sin(t))
+    )
     return lat + jitter_lat, lon + jitter_lon
 
 
@@ -67,7 +70,7 @@ class GeoService:
     async def get_user_location(
         db: AsyncSession,
         user_id: uuid.UUID,
-    ) -> Optional[UserLocation]:
+    ) -> UserLocation | None:
         """Fetch saved location coordinates for a user."""
         stmt = select(UserLocation).where(UserLocation.user_id == user_id)
         result = await db.execute(stmt)
@@ -81,7 +84,7 @@ class GeoService:
         radius_meters: int = 1500,
         page: int = 1,
         limit: int = 15,
-    ) -> Tuple[List[PostResponse], int]:
+    ) -> tuple[list[PostResponse], int]:
         """Fetch posts within the geographic radius using PostGIS ST_DWithin and ST_Distance."""
         offset = (page - 1) * limit
         point_geom = func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 4326)
@@ -123,7 +126,7 @@ class GeoService:
         results = await db.execute(paginated_query)
         rows = results.all()
 
-        post_responses: List[PostResponse] = []
+        post_responses: list[PostResponse] = []
         for post, alias_name, distance, r_lat, r_lon in rows:
             # Apply anti-triangulation Gaussian coordinate jitter
             j_lat, j_lon = apply_coordinate_jitter(float(r_lat), float(r_lon))
@@ -132,7 +135,11 @@ class GeoService:
                 PostResponse(
                     id=post.id,
                     author_alias=alias_name,
-                    category=post.category.value if hasattr(post.category, "value") else str(post.category),
+                    category=(
+                        post.category.value
+                        if hasattr(post.category, "value")
+                        else str(post.category)
+                    ),
                     title=post.title,
                     content=post.content,
                     distance_meters=int(distance) if distance is not None else None,

@@ -1,8 +1,10 @@
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional, Union
+from typing import Any
+
 import bcrypt
 import jwt
+
 from app.core.config import settings
 
 
@@ -25,9 +27,9 @@ def get_password_hash(password: str) -> str:
 
 
 def create_access_token(
-    subject: Union[str, Any],
-    expires_delta: Optional[timedelta] = None,
-    extra_claims: Optional[Dict[str, Any]] = None,
+    subject: str | Any,
+    expires_delta: timedelta | None = None,
+    extra_claims: dict[str, Any] | None = None,
 ) -> str:
     """Create a signed JWT Access Token with 60-minute default lifetime."""
     now = datetime.now(timezone.utc)
@@ -36,7 +38,7 @@ def create_access_token(
     else:
         expire = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
-    to_encode: Dict[str, Any] = {
+    to_encode: dict[str, Any] = {
         "sub": str(subject),
         "iat": now,
         "exp": expire,
@@ -50,9 +52,9 @@ def create_access_token(
 
 
 def create_refresh_token(
-    subject: Union[str, Any],
-    expires_delta: Optional[timedelta] = None,
-    extra_claims: Optional[Dict[str, Any]] = None,
+    subject: str | Any,
+    expires_delta: timedelta | None = None,
+    extra_claims: dict[str, Any] | None = None,
 ) -> str:
     """Create a signed JWT Refresh Token with 30-day default lifetime."""
     now = datetime.now(timezone.utc)
@@ -61,7 +63,7 @@ def create_refresh_token(
     else:
         expire = now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
-    to_encode: Dict[str, Any] = {
+    to_encode: dict[str, Any] = {
         "sub": str(subject),
         "iat": now,
         "exp": expire,
@@ -74,9 +76,9 @@ def create_refresh_token(
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
-def decode_token(token: str, verify_exp: bool = True) -> Dict[str, Any]:
+def decode_token(token: str, verify_exp: bool = True) -> dict[str, Any]:
     """Decode and validate a JWT token's signature and claims.
-    
+
     Raises:
         jwt.ExpiredSignatureError: If the token has expired.
         jwt.InvalidTokenError: If the token is invalid or signature check fails.

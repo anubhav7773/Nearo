@@ -1,9 +1,8 @@
 import json
 import random
 import secrets
-import string
 import uuid
-from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from redis.asyncio import Redis
 from sqlalchemy import select
@@ -35,7 +34,7 @@ router = APIRouter()
 async def send_otp(
     payload: OTPSendRequest,
     request: Request,
-    redis: Optional[Redis] = Depends(get_redis),
+    redis: Redis | None = Depends(get_redis),
 ):
     client_ip = request.client.host if request.client else "unknown_ip"
     phone = payload.phone_number
@@ -45,8 +44,12 @@ async def send_otp(
     rate_key_phone = f"ratelimit:otp:phone:{phone}"
 
     if redis:
-        allowed_ip = await check_rate_limit(redis, rate_key_ip, max_requests=3, window_seconds=600)
-        allowed_phone = await check_rate_limit(redis, rate_key_phone, max_requests=3, window_seconds=600)
+        allowed_ip = await check_rate_limit(
+            redis, rate_key_ip, max_requests=3, window_seconds=600
+        )
+        allowed_phone = await check_rate_limit(
+            redis, rate_key_phone, max_requests=3, window_seconds=600
+        )
         if not allowed_ip or not allowed_phone:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -63,7 +66,9 @@ async def send_otp(
 
     # 3. Store in Redis with 5-minute TTL (300 seconds)
     if redis:
-        session_data = json.dumps({"phone_number": phone, "otp": otp_code, "attempts": 0})
+        session_data = json.dumps(
+            {"phone_number": phone, "otp": otp_code, "attempts": 0}
+        )
         await redis.set(f"otp_session:{session_id}", session_data, ex=300)
 
     return OTPSendResponse(
@@ -82,7 +87,7 @@ async def send_otp(
 async def verify_otp(
     payload: OTPVerifyRequest,
     db: AsyncSession = Depends(get_db),
-    redis: Optional[Redis] = Depends(get_redis),
+    redis: Redis | None = Depends(get_redis),
 ):
     session_key = f"otp_session:{payload.session_id}"
     phone_number = None
@@ -187,8 +192,16 @@ async def get_me(current_user: User = Depends(get_current_user)):
     return UserResponse(
         id=current_user.id,
         alias_name=current_user.alias_name,
-        role=current_user.role.value if hasattr(current_user.role, "value") else str(current_user.role),
-        tier=current_user.tier.value if hasattr(current_user.tier, "value") else str(current_user.tier),
+        role=(
+            current_user.role.value
+            if hasattr(current_user.role, "value")
+            else str(current_user.role)
+        ),
+        tier=(
+            current_user.tier.value
+            if hasattr(current_user.tier, "value")
+            else str(current_user.tier)
+        ),
         is_verified=current_user.is_verified,
         is_active=current_user.is_active,
         created_at=current_user.created_at,
@@ -203,7 +216,7 @@ async def get_me(current_user: User = Depends(get_current_user)):
 async def delete_account(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    redis: Optional[Redis] = Depends(get_redis),
+    redis: Redis | None = Depends(get_redis),
 ):
     # Purge user record (cascades to user_locations, subscriptions, ads)
     await db.delete(current_user)

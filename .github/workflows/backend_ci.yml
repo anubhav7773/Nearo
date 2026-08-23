@@ -46,7 +46,10 @@ jobs:
 
     env:
       ENVIRONMENT: test
-      SECRET_KEY: test-secret-key-ci-pipeline-environment
+      SECRET_KEY: test-secret-key-ci-pipeline-environment-64-characters-long-key-xyz
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 60
+      REFRESH_TOKEN_EXPIRE_DAYS: 30
       POSTGRES_SERVER: localhost
       POSTGRES_PORT: 5432
       POSTGRES_USER: nearo_user
@@ -54,6 +57,12 @@ jobs:
       POSTGRES_DB: nearo_db
       DATABASE_URL: postgresql+asyncpg://nearo_user:nearo_password@localhost:5432/nearo_db
       REDIS_URL: redis://localhost:6379/0
+      CLERK_PUBLISHABLE_KEY: pk_test_ci_pipeline_key
+      CLERK_SECRET_KEY: sk_test_ci_pipeline_secret
+      CLERK_JWKS_URL: https://api.clerk.com/v1/jwks
+      GOOGLE_PLAY_PACKAGE_NAME: me.asiverticals.nearo
+      BACKEND_CORS_ORIGINS: http://localhost:3000,http://localhost:8000
+      PYTHONPATH: .
 
     steps:
       - name: Checkout Source Code
@@ -75,7 +84,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install flake8 black
+          pip install flake8 black ruff
 
       - name: Run Code Style & Linter Checks
         working-directory: ./backend

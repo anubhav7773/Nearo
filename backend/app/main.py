@@ -1,8 +1,9 @@
 from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.api.v1.router import api_router
 from app.core.config import settings
@@ -22,16 +23,27 @@ app = FastAPI(
     title=settings.PROJECT_NAME,
     description="Privacy-first, hyperlocal community & civic SOS platform backend gateway.",
     version="1.0.0",
-    openapi_url=f"{settings.API_V1_STR}/openapi.json",
-    docs_url=f"{settings.API_V1_STR}/docs",
-    redoc_url=f"{settings.API_V1_STR}/redoc",
+    openapi_url="/openapi.json",
+    docs_url="/docs",
+    redoc_url="/redoc",
     lifespan=lifespan,
 )
 
-# Configure CORS origins
+# Configure CORS origins cleanly
+cors_origins: list[str] = ["*"]
+if settings.BACKEND_CORS_ORIGINS:
+    if isinstance(settings.BACKEND_CORS_ORIGINS, list):
+        cors_origins = [str(o).rstrip("/") for o in settings.BACKEND_CORS_ORIGINS if o]
+    elif isinstance(settings.BACKEND_CORS_ORIGINS, str):
+        cors_origins = [
+            str(o).strip().rstrip("/")
+            for o in settings.BACKEND_CORS_ORIGINS.split(",")
+            if o.strip()
+        ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[str(origin).rstrip("/") for origin in settings.BACKEND_CORS_ORIGINS] if settings.BACKEND_CORS_ORIGINS else ["*"],
+    allow_origins=cors_origins or ["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -70,13 +82,27 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={
             "success": False,
             "error": "Internal Server Error",
-            "message": str(exc) if settings.ENVIRONMENT == "development" else "An unexpected error occurred.",
+            "message": (
+                str(exc)
+                if settings.ENVIRONMENT == "development"
+                else "An unexpected error occurred."
+            ),
         },
     )
 
 
 # Attach Version 1 API Router
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+
+# Root Health & Info Endpoint (for Uptime pinging / root checks)
+@app.get("/", tags=["Health"])
+async def root():
+    return {
+        "status": "healthy",
+        "service": "Nearo Backend API",
+        "version": "1.0.0",
+    }
 
 
 # Health Check Endpoints
@@ -90,3 +116,14 @@ async def health_check():
         "environment": settings.ENVIRONMENT,
         "version": "1.0.0",
     }
+
+
+# Convenience alias for /api/v1/docs -> /docs
+@app.get(f"{settings.API_V1_STR}/docs", include_in_schema=False)
+async def docs_alias():
+    return RedirectResponse(url="/docs")
+
+
+@app.get(f"{settings.API_V1_STR}/openapi.json", include_in_schema=False)
+async def openapi_alias():
+    return RedirectResponse(url="/openapi.json")

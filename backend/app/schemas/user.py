@@ -1,11 +1,13 @@
 import uuid
 from datetime import datetime
-from typing import Optional
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
 class OTPSendRequest(BaseModel):
-    phone_number: str = Field(..., pattern=r"^\+?[1-9]\d{7,14}$", description="E.164 phone number format")
+    phone_number: str = Field(
+        ..., pattern=r"^\+?[1-9]\d{7,14}$", description="E.164 phone number format"
+    )
 
 
 class OTPSendResponse(BaseModel):
@@ -17,7 +19,9 @@ class OTPSendResponse(BaseModel):
 class OTPVerifyRequest(BaseModel):
     session_id: str
     otp: str = Field(..., min_length=4, max_length=6, description="Received OTP code")
-    alias_name: Optional[str] = Field(None, min_length=3, max_length=50, description="Neighborhood alias name")
+    alias_name: str | None = Field(
+        None, min_length=3, max_length=50, description="Neighborhood alias name"
+    )
 
 
 class UserPublic(BaseModel):
@@ -58,4 +62,4 @@ class UserLocationUpdate(BaseModel):
 class UserLocationResponse(BaseModel):
     success: bool = True
     active_radius_meters: int = 1500
-    zone_name: Optional[str] = None
+    zone_name: str | None = None

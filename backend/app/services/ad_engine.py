@@ -1,8 +1,9 @@
 import urllib.parse
 from datetime import datetime, timezone
-from typing import Any, List, Optional, Union
+
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.models.ad import LocalAd
 from app.models.user import SubscriptionTier
 from app.schemas.ad import NativeAdResponse
@@ -16,7 +17,7 @@ class AdEngine:
         latitude: float,
         longitude: float,
         limit: int = 5,
-    ) -> List[NativeAdResponse]:
+    ) -> list[NativeAdResponse]:
         """Fetch active native ads whose target radius covers the user coordinate."""
         point_geom = func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 4326)
         now_utc = datetime.now(timezone.utc)
@@ -29,7 +30,7 @@ class AdEngine:
         stmt = (
             select(LocalAd, distance_expr)
             .where(
-                LocalAd.is_active == True,
+                LocalAd.is_active.is_(True),
                 LocalAd.expires_at > now_utc,
                 func.ST_DWithin(
                     func.cast(LocalAd.target_center, text("geography")),
@@ -44,13 +45,19 @@ class AdEngine:
         result = await db.execute(stmt)
         rows = result.all()
 
-        ad_responses: List[NativeAdResponse] = []
+        ad_responses: list[NativeAdResponse] = []
         for ad, distance in rows:
             # Build WhatsApp direct click URL
             whatsapp_url = None
             if ad.whatsapp_number:
-                clean_phone = ad.whatsapp_number.replace("+", "").replace(" ", "").replace("-", "")
-                msg = urllib.parse.quote(f"Hi {ad.business_name}, I saw your offer on Nearo!")
+                clean_phone = (
+                    ad.whatsapp_number.replace("+", "")
+                    .replace(" ", "")
+                    .replace("-", "")
+                )
+                msg = urllib.parse.quote(
+                    f"Hi {ad.business_name}, I saw your offer on Nearo!"
+                )
                 whatsapp_url = f"https://wa.me/{clean_phone}?text={msg}"
 
             ad_responses.append(
@@ -68,23 +75,25 @@ class AdEngine:
 
     @staticmethod
     def inject_native_ads(
-        posts: List[PostResponse],
-        ads: List[NativeAdResponse],
-        user_tier: Optional[Union[SubscriptionTier, str]] = None,
-    ) -> List[Union[PostResponse, NativeAdResponse]]:
+        posts: list[PostResponse],
+        ads: list[NativeAdResponse],
+        user_tier: SubscriptionTier | str | None = None,
+    ) -> list[PostResponse | NativeAdResponse]:
         """Inject 1 native ad after every 6th community post (cadence of 1 ad per 7 items)
-        
+
         Subscribers with tier == 'pro_resident' receive 0 ad injections.
         """
         # Check pro resident ad-free benefit
-        tier_str = user_tier.value if hasattr(user_tier, "value") else str(user_tier or "")
+        tier_str = (
+            user_tier.value if hasattr(user_tier, "value") else str(user_tier or "")
+        )
         if tier_str in (SubscriptionTier.PRO_RESIDENT.value, "pro_resident", "pro"):
             return list(posts)
 
         if not ads or not posts:
             return list(posts)
 
-        combined_feed: List[Union[PostResponse, NativeAdResponse]] = []
+        combined_feed: list[PostResponse | NativeAdResponse] = []
         ad_index = 0
         total_ads = len(ads)
 

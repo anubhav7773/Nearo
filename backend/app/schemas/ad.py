@@ -1,7 +1,7 @@
-import uuid
 from datetime import datetime
-from typing import Optional
+
 from pydantic import BaseModel, ConfigDict, Field
+
 from app.models.user import SubscriptionTier
 
 
@@ -9,10 +9,10 @@ class NativeAdResponse(BaseModel):
     type: str = "native_ad"
     id: str
     business_name: str
-    tagline: Optional[str] = None
+    tagline: str | None = None
     cta_title: str = "Contact on WhatsApp"
-    whatsapp_url: Optional[str] = None
-    distance_meters: Optional[int] = None
+    whatsapp_url: str | None = None
+    distance_meters: int | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -27,25 +27,27 @@ class SubscriptionResponse(BaseModel):
     amount_inr: float
     currency: str = "INR"
     tier: str
-    starts_at: Optional[datetime] = None
-    expires_at: Optional[datetime] = None
+    starts_at: datetime | None = None
+    expires_at: datetime | None = None
 
 
 class GooglePlayPurchaseVerifyRequest(BaseModel):
-    purchase_token: str = Field(..., description="Google Play In-App Billing Purchase Token")
+    purchase_token: str = Field(
+        ..., description="Google Play In-App Billing Purchase Token"
+    )
     product_id: str = Field(..., description="Product SKU / Subscription ID")
-    package_name: Optional[str] = Field(None, description="App package name override")
+    package_name: str | None = Field(None, description="App package name override")
 
 
 class GooglePlayPurchaseVerifyResponse(BaseModel):
     success: bool
     message: str
     tier: str
-    order_id: Optional[str] = None
+    order_id: str | None = None
     is_active: bool = True
     is_verified_merchant: bool = False
-    starts_at: Optional[datetime] = None
-    expires_at: Optional[datetime] = None
+    starts_at: datetime | None = None
+    expires_at: datetime | None = None
 
 
 class AdMobConfigResponse(BaseModel):

@@ -1,12 +1,14 @@
 import asyncio
-from typing import AsyncGenerator, Optional
+from collections.abc import AsyncGenerator
+
 import redis.asyncio as aioredis
+
 from app.core.config import settings
 
-redis_pool: Optional[aioredis.Redis] = None
+redis_pool: aioredis.Redis | None = None
 
 
-async def init_redis_pool() -> Optional[aioredis.Redis]:
+async def init_redis_pool() -> aioredis.Redis | None:
     """Initialize the asynchronous Redis connection pool."""
     global redis_pool
     try:
@@ -36,7 +38,7 @@ async def close_redis_pool() -> None:
         redis_pool = None
 
 
-async def get_redis() -> AsyncGenerator[Optional[aioredis.Redis], None]:
+async def get_redis() -> AsyncGenerator[aioredis.Redis | None, None]:
     """FastAPI dependency provider yielding the Redis client if online, else None."""
     global redis_pool
     if redis_pool is not None:
@@ -64,13 +66,13 @@ async def get_redis() -> AsyncGenerator[Optional[aioredis.Redis], None]:
 
 
 async def check_rate_limit(
-    redis: Optional[aioredis.Redis],
+    redis: aioredis.Redis | None,
     key: str,
     max_requests: int,
     window_seconds: int,
 ) -> bool:
     """Token-bucket / fixed-window rate limiter using Redis.
-    
+
     Returns:
         bool: True if request is allowed, False if rate limit is exceeded.
     """

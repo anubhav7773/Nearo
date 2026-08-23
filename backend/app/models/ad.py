@@ -1,5 +1,7 @@
 import enum
 import uuid
+
+from geoalchemy2 import Geometry
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -16,7 +18,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from geoalchemy2 import Geometry
+
 from app.core.database import Base
 from app.models.user import SubscriptionTier
 
@@ -42,7 +44,12 @@ class LocalAd(Base):
         index=True,
     )
     ad_type = Column(
-        Enum(AdType, name="ad_type", native_enum=True, values_callable=lambda obj: [e.value for e in obj]),
+        Enum(
+            AdType,
+            name="ad_type",
+            native_enum=True,
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
         default=AdType.IN_FEED_CARD,
         nullable=False,
     )
@@ -73,9 +80,7 @@ class LocalAd(Base):
     # Relationships
     business = relationship("User", back_populates="ads")
 
-    __table_args__ = (
-        Index("idx_local_ads_active", "is_active", "expires_at"),
-    )
+    __table_args__ = (Index("idx_local_ads_active", "is_active", "expires_at"),)
 
 
 class Subscription(Base):
@@ -94,7 +99,12 @@ class Subscription(Base):
         index=True,
     )
     tier = Column(
-        Enum(SubscriptionTier, name="subscription_tier", native_enum=True, values_callable=lambda obj: [e.value for e in obj]),
+        Enum(
+            SubscriptionTier,
+            name="subscription_tier",
+            native_enum=True,
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
         nullable=False,
     )
     amount = Column(Numeric(10, 2), nullable=False)
@@ -116,6 +126,4 @@ class Subscription(Base):
     # Relationships
     user = relationship("User", back_populates="subscriptions")
 
-    __table_args__ = (
-        Index("idx_subscriptions_user", "user_id", "is_active"),
-    )
+    __table_args__ = (Index("idx_subscriptions_user", "user_id", "is_active"),)

@@ -1,12 +1,13 @@
 import uuid
 from datetime import datetime, timezone
-from fastapi.testclient import TestClient
+
 from app.main import app
 from app.models.user import SubscriptionTier
 from app.schemas.ad import NativeAdResponse
 from app.schemas.post import PostResponse
 from app.services.ad_engine import AdEngine
 from app.services.geo_service import apply_coordinate_jitter
+from fastapi.testclient import TestClient
 
 client = TestClient(app)
 
@@ -35,7 +36,9 @@ def test_coordinate_jitter_anti_triangulation():
     """Verify anti-triangulation spatial jitter stays within 75-125m radius."""
     lat, lon = 26.7922, 82.1998
     for _ in range(10):
-        j_lat, j_lon = apply_coordinate_jitter(lat, lon, min_meters=75.0, max_meters=125.0)
+        j_lat, j_lon = apply_coordinate_jitter(
+            lat, lon, min_meters=75.0, max_meters=125.0
+        )
         assert (j_lat, j_lon) != (lat, lon)
         # Verify delta is bounded by ~0.002 degrees (under 200 meters)
         assert abs(j_lat - lat) < 0.003
@@ -73,6 +76,8 @@ def test_ad_injection_cadence_and_pro_ad_free():
     assert getattr(free_feed[13], "type", None) == "native_ad"
 
     # Pro tier: strictly 14 community posts and zero ads
-    pro_feed = AdEngine.inject_native_ads(posts, ads, user_tier=SubscriptionTier.PRO_RESIDENT)
+    pro_feed = AdEngine.inject_native_ads(
+        posts, ads, user_tier=SubscriptionTier.PRO_RESIDENT
+    )
     assert len(pro_feed) == 14
     assert all(getattr(item, "type", None) == "community_post" for item in pro_feed)

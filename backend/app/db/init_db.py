@@ -1,17 +1,21 @@
 import asyncio
 import logging
 from pathlib import Path
+
 from sqlalchemy import text
-from app.core.config import settings
-from app.core.database import Base, engine
+
 # Ensure all models are imported so Base.metadata knows about all tables
 import app.models  # noqa: F401
+from app.core.config import settings
+from app.core.database import Base, engine
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("nearo.db_init")
 
 # Schema initialization script path
-SCHEMA_SQL_PATH = Path(__file__).resolve().parents[3] / "docs" / "02_DATABASE_SCHEMA.sql"
+SCHEMA_SQL_PATH = (
+    Path(__file__).resolve().parents[3] / "docs" / "02_DATABASE_SCHEMA.sql"
+)
 
 
 async def check_database_connection() -> bool:
@@ -49,7 +53,10 @@ async def init_db() -> None:
         enum_definitions = [
             ("user_role", "('resident', 'moderator', 'business', 'admin')"),
             ("subscription_tier", "('free', 'pro_resident', 'business_pro')"),
-            ("post_category", "('general', 'alert', 'civic_issue', 'help_needed', 'trade')"),
+            (
+                "post_category",
+                "('general', 'alert', 'civic_issue', 'help_needed', 'trade')",
+            ),
             ("sos_status", "('active', 'resolved', 'false_alarm')"),
             ("ad_type", "('in_feed_card', 'directory_top')"),
         ]
@@ -61,7 +68,9 @@ async def init_db() -> None:
             type_exists = (await conn.execute(check_sql)).scalar()
             if not type_exists:
                 logger.info(f"Creating enum type: {enum_name}")
-                await conn.execute(text(f"CREATE TYPE {enum_name} AS ENUM {enum_values};"))
+                await conn.execute(
+                    text(f"CREATE TYPE {enum_name} AS ENUM {enum_values};")
+                )
 
         # 3. Create all tables via SQLAlchemy declarative metadata
         logger.info("Creating declarative ORM tables...")
@@ -77,13 +86,18 @@ async def init_db() -> None:
 
         for idx_name, table_name, col_name in spatial_indexes:
             index_check_sql = text(
-                f"SELECT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relname = '{idx_name}');"
+                "SELECT EXISTS (SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace "
+                f"WHERE c.relname = '{idx_name}');"
             )
             idx_exists = (await conn.execute(index_check_sql)).scalar()
             if not idx_exists:
-                logger.info(f"Creating spatial GIST index: {idx_name} on {table_name}({col_name})")
+                logger.info(
+                    f"Creating spatial GIST index: {idx_name} on {table_name}({col_name})"
+                )
                 await conn.execute(
-                    text(f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table_name} USING GIST({col_name});")
+                    text(
+                        f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table_name} USING GIST({col_name});"
+                    )
                 )
 
     logger.info("Nearo database initialization completed successfully.")

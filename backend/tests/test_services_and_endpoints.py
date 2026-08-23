@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-import pytest
+
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -81,7 +81,9 @@ def test_ad_engine_injection_and_pro_exclusion():
     assert getattr(free_feed[6], "type", None) == "native_ad"
 
     # Pro resident should receive 0 injected ads
-    pro_feed = AdEngine.inject_native_ads(posts, ads, user_tier=SubscriptionTier.PRO_RESIDENT)
+    pro_feed = AdEngine.inject_native_ads(
+        posts, ads, user_tier=SubscriptionTier.PRO_RESIDENT
+    )
     assert len(pro_feed) == 10
     assert all(getattr(item, "type", None) == "community_post" for item in pro_feed)
 

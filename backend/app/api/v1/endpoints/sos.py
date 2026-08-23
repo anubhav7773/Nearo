@@ -1,4 +1,3 @@
-from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -18,18 +17,23 @@ router = APIRouter()
     response_model=SOSBroadcastResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Trigger Instant Civic SOS Emergency Broadcast",
-    description="Publishes an emergency alert to all verified residents within 1.5 km via Redis PubSub with a 5-minute cooldown.",
+    description=(
+        "Publishes an emergency alert to all verified residents within 1.5 km via "
+        "Redis PubSub with a 5-minute cooldown."
+    ),
 )
 async def broadcast_sos(
     payload: SOSCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    redis: Optional[Redis] = Depends(get_redis),
+    redis: Redis | None = Depends(get_redis),
 ):
     # 1. Enforce 5-minute cooldown (1 active SOS per user / 5 mins)
     cooldown_key = f"ratelimit:sos_cooldown:{current_user.id}"
     if redis:
-        allowed = await check_rate_limit(redis, cooldown_key, max_requests=1, window_seconds=300)
+        allowed = await check_rate_limit(
+            redis, cooldown_key, max_requests=1, window_seconds=300
+        )
         if not allowed:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -53,7 +57,7 @@ async def broadcast_sos(
 
 @router.get(
     "/active",
-    response_model=List[SOSEventDetail],
+    response_model=list[SOSEventDetail],
     summary="Fetch Active Radius Emergencies",
     description="Returns all unresolved SOS emergency alerts within the resident's neighborhood radius.",
 )

@@ -1,5 +1,7 @@
 import enum
 import uuid
+
+from geoalchemy2 import Geometry
 from sqlalchemy import (
     Boolean,
     Column,
@@ -15,7 +17,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from geoalchemy2 import Geometry
+
 from app.core.database import Base
 
 
@@ -43,7 +45,12 @@ class Post(Base):
         index=True,
     )
     category = Column(
-        Enum(PostCategory, name="post_category", native_enum=True, values_callable=lambda obj: [e.value for e in obj]),
+        Enum(
+            PostCategory,
+            name="post_category",
+            native_enum=True,
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
         default=PostCategory.GENERAL,
         nullable=False,
         index=True,
@@ -73,6 +80,4 @@ class Post(Base):
     # Relationships
     author = relationship("User", back_populates="posts")
 
-    __table_args__ = (
-        Index("idx_posts_created_at", created_at.desc()),
-    )
+    __table_args__ = (Index("idx_posts_created_at", created_at.desc()),)

@@ -1,9 +1,9 @@
 import logging
 import uuid
-from typing import Optional
+
+import jwt
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-import jwt
 from redis.asyncio import Redis
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,9 +20,9 @@ security = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
-    auth: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    auth: HTTPAuthorizationCredentials | None = Depends(security),
     db: AsyncSession = Depends(get_db),
-    redis: Optional[Redis] = Depends(get_redis),
+    redis: Redis | None = Depends(get_redis),
 ) -> User:
     """Validate bearer access token (Clerk JWKS or Internal JWT) and return/provision User model."""
     if not auth or not auth.credentials:
@@ -33,7 +33,7 @@ async def get_current_user(
         )
 
     token = auth.credentials
-    user: Optional[User] = None
+    user: User | None = None
 
     # Step 1: Attempt Clerk JWT validation first (or check if Clerk token)
     is_clerk_token = False
@@ -44,8 +44,14 @@ async def get_current_user(
         unverified_payload = jwt.decode(token, options={"verify_signature": False})
         iss = unverified_payload.get("iss", "")
         sub = str(unverified_payload.get("sub", ""))
+        has_clerk_publishable = bool(settings.CLERK_PUBLISHABLE_KEY)
+        is_missing_token_type = not unverified_payload.get("type")
 
-        if "clerk" in iss or sub.startswith("user_") or (not unverified_payload.get("type") and settings.CLERK_PUBLISHABLE_KEY):
+        if (
+            "clerk" in iss
+            or sub.startswith("user_")
+            or (is_missing_token_type and has_clerk_publishable)
+        ):
             is_clerk_token = True
             payload = decode_clerk_jwt(token)
             clerk_claims = extract_clerk_user_claims(payload)
@@ -60,7 +66,9 @@ async def get_current_user(
     # Step 2: Handle Clerk User Provisioning / Resolution
     if is_clerk_token and clerk_claims:
         phone_number = clerk_claims.get("phone_number")
-        alias_name = clerk_claims.get("alias_name") or f"Resident_{clerk_claims['sub'][-4:]}"
+        alias_name = (
+            clerk_claims.get("alias_name") or f"Resident_{clerk_claims['sub'][-4:]}"
+        )
 
         if not phone_number:
             raise HTTPException(
@@ -97,9 +105,9 @@ async def get_current_user(
     if not user:
         try:
             payload = decode_token(token)
-            user_id_str: Optional[str] = payload.get("sub")
-            token_type: Optional[str] = payload.get("type")
-            jti: Optional[str] = payload.get("jti")
+            user_id_str: str | None = payload.get("sub")
+            token_type: str | None = payload.get("type")
+            jti: str | None = payload.get("jti")
 
             if not user_id_str or token_type != "access":
                 raise HTTPException(
@@ -146,10 +154,10 @@ async def get_current_user(
 
 
 async def get_current_user_optional(
-    auth: Optional[HTTPAuthorizationCredentials] = Depends(security),
+    auth: HTTPAuthorizationCredentials | None = Depends(security),
     db: AsyncSession = Depends(get_db),
-    redis: Optional[Redis] = Depends(get_redis),
-) -> Optional[User]:
+    redis: Redis | None = Depends(get_redis),
+) -> User | None:
     """Optionally resolve the current User if bearer token is provided."""
     if not auth or not auth.credentials:
         return None

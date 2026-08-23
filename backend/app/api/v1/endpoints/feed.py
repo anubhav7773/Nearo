@@ -1,4 +1,3 @@
-from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from redis.asyncio import Redis
 from sqlalchemy import func
@@ -24,20 +23,28 @@ router = APIRouter()
 )
 async def get_feed(
     request: Request,
-    lat: Optional[float] = Query(None, description="Current user latitude"),
-    lng: Optional[float] = Query(None, description="Current user longitude"),
-    radius_meters: int = Query(1500, ge=500, le=5000, description="Search radius in meters"),
+    lat: float | None = Query(None, description="Current user latitude"),
+    lng: float | None = Query(None, description="Current user longitude"),
+    radius_meters: int = Query(
+        1500, ge=500, le=5000, description="Search radius in meters"
+    ),
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(15, ge=1, le=50, description="Items per page"),
-    current_user: Optional[User] = Depends(get_current_user_optional),
+    current_user: User | None = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
-    redis: Optional[Redis] = Depends(get_redis),
+    redis: Redis | None = Depends(get_redis),
 ):
     # 1. Rate Limiting Check (60 requests / minute per user/IP)
-    ident = str(current_user.id) if current_user else (request.client.host if request.client else "anon")
+    ident = (
+        str(current_user.id)
+        if current_user
+        else (request.client.host if request.client else "anon")
+    )
     rate_key = f"ratelimit:feed:{ident}"
     if redis:
-        allowed = await check_rate_limit(redis, rate_key, max_requests=60, window_seconds=60)
+        allowed = await check_rate_limit(
+            redis, rate_key, max_requests=60, window_seconds=60
+        )
         if not allowed:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -104,12 +111,14 @@ async def create_post(
     payload: PostCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    redis: Optional[Redis] = Depends(get_redis),
+    redis: Redis | None = Depends(get_redis),
 ):
     # 1. Rate Limiting Check (5 posts / hour per User UUID)
     rate_key = f"ratelimit:post_create:{current_user.id}"
     if redis:
-        allowed = await check_rate_limit(redis, rate_key, max_requests=5, window_seconds=3600)
+        allowed = await check_rate_limit(
+            redis, rate_key, max_requests=5, window_seconds=3600
+        )
         if not allowed:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
@@ -117,7 +126,9 @@ async def create_post(
             )
 
     # 2. Insert Post with Point geometry
-    point_geom = func.ST_SetSRID(func.ST_MakePoint(payload.longitude, payload.latitude), 4326)
+    point_geom = func.ST_SetSRID(
+        func.ST_MakePoint(payload.longitude, payload.latitude), 4326
+    )
     new_post = Post(
         author_id=current_user.id,
         category=payload.category,

@@ -1,11 +1,12 @@
 import enum
 import uuid
+
+from geoalchemy2 import Geometry
 from sqlalchemy import (
     Column,
     DateTime,
     Enum,
     ForeignKey,
-    Index,
     Integer,
     String,
     Text,
@@ -14,7 +15,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
-from geoalchemy2 import Geometry
+
 from app.core.database import Base
 
 
@@ -39,7 +40,9 @@ class SOSEvent(Base):
         nullable=False,
         index=True,
     )
-    emergency_type = Column(String(50), nullable=False)  # 'medical', 'security', 'fire', 'scam'
+    emergency_type = Column(
+        String(50), nullable=False
+    )  # 'medical', 'security', 'fire', 'scam'
     description = Column(Text, nullable=True)
     initial_location = Column(
         Geometry(geometry_type="POINT", srid=4326),
@@ -50,7 +53,12 @@ class SOSEvent(Base):
         nullable=False,
     )
     status = Column(
-        Enum(SOSStatus, name="sos_status", native_enum=True, values_callable=lambda obj: [e.value for e in obj]),
+        Enum(
+            SOSStatus,
+            name="sos_status",
+            native_enum=True,
+            values_callable=lambda obj: [e.value for e in obj],
+        ),
         default=SOSStatus.ACTIVE,
         nullable=False,
         index=True,

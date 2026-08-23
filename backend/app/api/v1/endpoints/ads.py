@@ -1,14 +1,7 @@
-import uuid
-from datetime import datetime, timedelta, timezone
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import func, select, text
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user
 from app.core.database import get_db
-from app.models.ad import AdType, LocalAd
-from app.models.user import User
 from app.schemas.ad import NativeAdResponse
 from app.services.ad_engine import AdEngine
 
@@ -17,7 +10,7 @@ router = APIRouter()
 
 @router.get(
     "/nearby",
-    response_model=List[NativeAdResponse],
+    response_model=list[NativeAdResponse],
     summary="Get Nearby Hyperlocal Ads",
 )
 async def get_nearby_ads(
