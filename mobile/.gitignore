@@ -46,3 +46,10 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Android Firebase / Secrets
+**/android/app/google-services.json
+**/android/app/src/release/google-services.json
+*.keystore
+*.jks
+key.properties

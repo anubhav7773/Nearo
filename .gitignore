@@ -82,9 +82,13 @@ redis_data/
 *.log
 docker-compose.override.yml
 
-# Secrets & Certificates
+# Secrets, Keystores & Firebase Configs
 *.pem
 *.key
 *.crt
 *.keystore
 *.jks
+key.properties
+**/android/app/google-services.json
+**/android/app/src/release/google-services.json
+skills-lock.json
