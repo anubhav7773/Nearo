@@ -103,3 +103,14 @@ class FCMService:
         except Exception as exc:
             logger.warning("FCM multicast exception: %s", str(exc))
             return {"success_count": 0, "failure_count": len(valid_tokens)}
+
+    @classmethod
+    async def send_sos_push(
+        cls,
+        fcm_tokens: list[str],
+        title: str,
+        body: str,
+        data: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Alias for send_sos_multicast for FCM Civic SOS notifications."""
+        return await cls.send_sos_multicast(tokens=fcm_tokens, title=title, body=body, data=data)
