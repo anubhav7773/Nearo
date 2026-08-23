@@ -401,13 +401,13 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
                             const Icon(Icons.storefront_outlined, size: 48, color: AppColors.textMuted),
                             const SizedBox(height: 12),
                             const Text(
-                              'No verified businesses registered within this radius yet.',
+                              'No verified local services listed in this area yet.',
                               textAlign: TextAlign.center,
                               style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
                             ),
                             const SizedBox(height: 6),
                             const Text(
-                              'Be the first to list yours!',
+                              'Be the first to list yours and reach neighbors nearby!',
                               style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
                             ),
                             const SizedBox(height: 16),

@@ -286,7 +286,7 @@ class _FeedScreenState extends State<FeedScreen> {
                                 Navigator.pop(modalCtx);
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(
-                                    content: Text('Neighborhood update published successfully!'),
+                                    content: Text('Post published to community radius.'),
                                     backgroundColor: AppColors.verifiedGreen,
                                   ),
                                 );
@@ -512,7 +512,7 @@ class _FeedScreenState extends State<FeedScreen> {
                             ),
                             const SizedBox(height: 12),
                             const Text(
-                              'No active community updates within this radius.',
+                              'No community updates in your radius yet.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 15,
@@ -522,7 +522,7 @@ class _FeedScreenState extends State<FeedScreen> {
                             ),
                             const SizedBox(height: 6),
                             const Text(
-                              'Be the first to share news, maintenance info, or help your neighborhood!',
+                              'Be the first to share an alert or civic update!',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 fontSize: 13,
