@@ -29,6 +29,23 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+# Root Health & Uptime Endpoints (explicitly handles GET & HEAD at top level for UptimeRobot / Render pingers)
+@app.api_route("/", methods=["GET", "HEAD"], include_in_schema=True)
+async def root_ping():
+    return {
+        "status": "healthy",
+        "service": "Nearo Backend API",
+        "version": "1.0.0",
+    }
+
+
+@app.api_route("/health", methods=["GET", "HEAD"], include_in_schema=True)
+@app.api_route(f"{settings.API_V1_STR}/health", methods=["GET", "HEAD"], include_in_schema=True)
+async def health_ping():
+    return {"status": "healthy"}
+
+
 # Configure CORS origins cleanly
 cors_origins: list[str] = ["*"]
 if settings.BACKEND_CORS_ORIGINS:
@@ -93,32 +110,6 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 # Attach Version 1 API Router
 app.include_router(api_router, prefix=settings.API_V1_STR)
-
-
-# Root Health & Info Endpoint (supports GET and HEAD for UptimeRobot / Uptime pingers)
-@app.get("/", tags=["Health"])
-@app.head("/", include_in_schema=False)
-async def root():
-    return {
-        "status": "healthy",
-        "service": "Nearo Backend API",
-        "version": "1.0.0",
-    }
-
-
-# Health Check Endpoints (supports GET and HEAD)
-@app.get("/health", tags=["Health"])
-@app.head("/health", include_in_schema=False)
-@app.get(f"{settings.API_V1_STR}/health", tags=["Health"])
-@app.head(f"{settings.API_V1_STR}/health", include_in_schema=False)
-async def health_check():
-    return {
-        "status": "healthy",
-        "service": settings.PROJECT_NAME,
-        "subdomain": settings.SUBDOMAIN,
-        "environment": settings.ENVIRONMENT,
-        "version": "1.0.0",
-    }
 
 
 # Convenience alias for /api/v1/docs -> /docs
