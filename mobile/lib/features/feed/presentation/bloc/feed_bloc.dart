@@ -110,13 +110,18 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
           userLng: lng,
         ));
       } else {
-        emit(FeedError('Failed to fetch neighborhood feed.'));
+        emit(FeedLoaded(
+          items: const [],
+          activeRadiusMeters: radius,
+          activeCategory: category,
+          userLat: lat,
+          userLng: lng,
+        ));
       }
     } catch (e) {
-      // If error occurs (e.g. offline/mock demo), emit fallback data
-      final fallbackItems = _generateFallbackFeed();
+      // Clean fallback: empty feed if offline/error
       emit(FeedLoaded(
-        items: fallbackItems,
+        items: const [],
         activeRadiusMeters: radius,
         activeCategory: category,
         userLat: lat,
@@ -228,75 +233,8 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
         add(RefreshFeed());
       }
     } catch (_) {
-      // Offline fallback: refresh feed to show latest cached
       add(RefreshFeed());
     }
   }
-
-  List<FeedItem> _generateFallbackFeed() {
-    return [
-      CommunityPostItem(
-        id: 'post_1',
-        authorAlias: 'Nagarik_99',
-        category: 'civic_issue',
-        title: 'Sector 4 Water Supply Line Maintenance',
-        content:
-            'The municipal pipeline repair is currently ongoing near the main gate. Water supply expected to resume by 5 PM.',
-        upvotes: 14,
-        commentsCount: 3,
-        distanceMeters: 340,
-        distanceText: '340m away',
-        createdAt: DateTime.now().subtract(const Duration(minutes: 12)),
-      ),
-      CommunityPostItem(
-        id: 'post_2',
-        authorAlias: 'AyodhyaResident_04',
-        category: 'alert',
-        title: 'Cyber Fraud / Fake Electricity Bill SMS Alert',
-        content:
-            'Residents received fake SMS asking to call an unknown number for immediate bill payment. Do not click any links or share OTPs!',
-        upvotes: 28,
-        commentsCount: 8,
-        distanceMeters: 520,
-        distanceText: '520m away',
-        createdAt: DateTime.now().subtract(const Duration(hours: 1)),
-      ),
-      CommunityPostItem(
-        id: 'post_3',
-        authorAlias: 'KalyanSamiti_2',
-        category: 'help_needed',
-        title: 'Urgent B+ Blood Donor at District Hospital',
-        content:
-            'Emergency patient admitted in trauma ward. Anyone available near Civil Lines please contact hospital reception directly.',
-        upvotes: 45,
-        commentsCount: 12,
-        distanceMeters: 750,
-        distanceText: '750m away',
-        createdAt: DateTime.now().subtract(const Duration(hours: 2)),
-      ),
-      NativeAdItem(
-        id: 'ad_1',
-        businessName: 'Gupta Diagnostic Center',
-        tagline:
-            'Special 20% off full body checkups for verified neighborhood residents',
-        ctaTitle: 'Chat on WhatsApp',
-        whatsappUrl: 'https://wa.me/919876543210?text=Hello%20Nearo%20Offer',
-        distanceMeters: 820,
-        distanceText: '820m away',
-      ),
-      CommunityPostItem(
-        id: 'post_4',
-        authorAlias: 'Parihar_Shop',
-        category: 'trade',
-        title: 'Fresh Organic Mangoes Arrived',
-        content:
-            'Directly from Malihabad orchard. Available at Shop #12 near Central Mandir.',
-        upvotes: 9,
-        commentsCount: 2,
-        distanceMeters: 950,
-        distanceText: '950m away',
-        createdAt: DateTime.now().subtract(const Duration(hours: 4)),
-      ),
-    ];
-  }
 }
+
