@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     FIREBASE_CREDENTIALS_JSON: str | None = None
     FIREBASE_SERVICE_ACCOUNT_PATH: str | None = None
 
+    # Supabase Configuration & API Credentials
+    SUPABASE_URL: str | None = None
+    SUPABASE_ANON_KEY: str | None = None
+    SUPABASE_SERVICE_ROLE_KEY: str | None = None
+
     # Supabase PostgreSQL 16 + PostGIS Spatial Database (Mumbai AWS pooler)
     POSTGRES_SERVER: str = "localhost"
     POSTGRES_PORT: int = 5432
