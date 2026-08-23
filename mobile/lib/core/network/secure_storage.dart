@@ -91,6 +91,10 @@ class SecureStorageService {
     await _storage.write(key: _keyRadiusKm, value: radiusKm.toString());
   }
 
+  static Future<void> setRadiusKm(double radiusKm) async {
+    await saveRadiusKm(radiusKm);
+  }
+
   static Future<double> getRadiusKm() async {
     final val = await _storage.read(key: _keyRadiusKm);
     return val != null ? (double.tryParse(val) ?? 1.5) : 1.5;

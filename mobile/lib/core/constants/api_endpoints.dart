@@ -14,11 +14,13 @@ class ApiEndpoints {
   static const String verifyEmailCode = '/auth/email/verify-code';
   static const String googleOAuth = '/auth/oauth/google';
 
-  // User Profile & Account (Phase 1 Live Sync Pipeline)
+  // User Profile & Account (Phase 1 & Phase 5 Live Sync Pipeline)
   static const String userSync = '/users/sync';
   static const String usersMe = '/users/me';
+  static const String userRadius = '/users/me/radius';
+  static const String deleteUserMe = '/users/me';
   static const String me = '/auth/me';
-  static const String deleteAccount = '/auth/account';
+  static const String deleteAccount = '/users/me';
 
   // Legacy SMS OTP Routes
   static const String sendOtp = '/auth/otp/send';

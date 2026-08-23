@@ -138,3 +138,14 @@ class UserProfileResponse(BaseModel):
     created_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class UserRadiusUpdateRequest(BaseModel):
+    radius_km: float = Field(
+        ..., ge=0.5, le=5.0, description="Neighborhood radius preference in kilometers (0.5 - 5.0)"
+    )
+
+
+class UserDeleteResponse(BaseModel):
+    status: str = "success"
+    message: str = "All personal data erased permanently."

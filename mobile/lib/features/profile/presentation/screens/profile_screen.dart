@@ -16,10 +16,13 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final AuthRepositoryImpl _authRepository = AuthRepositoryImpl();
-  String _aliasName = 'AyodhyaResident_04';
+  final ApiClient _apiClient = ApiClient();
+
+  String _aliasName = 'Resident_User';
   String _userTier = 'free';
   double _radiusMeters = 1500;
   bool _isUpgrading = false;
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -37,6 +40,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if (alias != null) _aliasName = alias;
         if (tier != null) _userTier = tier;
         _radiusMeters = radiusKm * 1000.0;
+        _isLoading = false;
       });
     }
 
@@ -51,7 +55,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         setState(() {
           if (liveAlias != null) _aliasName = liveAlias.toString();
           if (liveTier != null) _userTier = liveTier.toString();
-          if (liveRadius is num) _radiusMeters = liveRadius.toDouble() * 1000.0;
+          if (liveRadius is num) {
+            _radiusMeters = liveRadius.toDouble() * 1000.0;
+            SecureStorageService.setRadiusKm(liveRadius.toDouble());
+          }
         });
       }
     } catch (_) {}
@@ -60,7 +67,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _upgradeToPro() async {
     setState(() => _isUpgrading = true);
     try {
-      final response = await ApiClient().dio.post(
+      final response = await _apiClient.dio.post(
         ApiEndpoints.createSubscriptionOrder,
         data: {
           'tier': 'pro_resident',
@@ -104,15 +111,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _syncRadius(double value) async {
     setState(() => _radiusMeters = value);
+    final radiusKm = value / 1000.0;
+    await SecureStorageService.setRadiusKm(radiusKm);
+
     try {
-      await ApiClient().dio.put(
-        ApiEndpoints.syncLocation,
-        data: {
-          'latitude': 26.7922,
-          'longitude': 82.1998,
-          'pincode': '224001',
-          'preferred_radius_meters': value.toInt(),
-        },
+      await _apiClient.dio.patch(
+        ApiEndpoints.userRadius,
+        data: {'radius_km': radiusKm},
       );
     } catch (_) {}
   }
@@ -121,9 +126,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Account & Personal Data?'),
+        title: const Text('Delete Account & Erase All Data?'),
         content: const Text(
-          'Under the India DPDP Act, your profile, linked GPS coordinates, and activity will be permanently erased. This cannot be undone.',
+          'Are you sure? Under India DPDP privacy regulations, this will permanently delete all your posts, upvotes, verified status, and civic activity. This action is irreversible.',
         ),
         actions: [
           TextButton(
@@ -134,13 +139,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
             onPressed: () async {
               Navigator.pop(ctx);
               try {
-                await ApiClient().dio.delete(ApiEndpoints.deleteAccount);
+                await _apiClient.dio.delete(ApiEndpoints.deleteUserMe);
               } catch (_) {}
               await SecureStorageService.clearSession();
               widget.onLogout();
             },
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.sosRed),
-            child: const Text('Purge My Data'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.sosRed,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Purge My Data Permanently'),
           ),
         ],
       ),
@@ -172,229 +180,231 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 1. Profile Header Card
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceCard,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.borderSubtle),
-              ),
-              child: Row(
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: AppColors.primaryBlue))
+          : SingleChildScrollView(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  CircleAvatar(
-                    radius: 28,
-                    backgroundColor: AppColors.primaryBlue.withValues(alpha: 0.12),
-                    child: const Icon(
-                      Icons.person,
-                      size: 32,
-                      color: AppColors.primaryBlue,
+                  // 1. Profile Header Card
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceCard,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.borderSubtle),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 28,
+                          backgroundColor: AppColors.primaryBlue.withValues(alpha: 0.12),
+                          child: const Icon(
+                            Icons.person,
+                            size: 32,
+                            color: AppColors.primaryBlue,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      _aliasName,
+                                      style: const TextStyle(
+                                        fontSize: 17,
+                                        fontWeight: FontWeight.w700,
+                                        color: AppColors.textPrimary,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    padding: const EdgeInsets.all(3),
+                                    decoration: const BoxDecoration(
+                                      color: AppColors.verifiedGreenBg,
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: const Icon(
+                                      Icons.verified,
+                                      size: 14,
+                                      color: AppColors.verifiedGreen,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                isPro ? 'Resident Pro Member' : 'Standard Resident',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w500,
+                                  color: isPro ? AppColors.accentBlue : AppColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 14),
-                  Expanded(
+                  const SizedBox(height: 20),
+
+                  // 2. Pro Tier Upgrade Card
+                  if (!isPro) ...[
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        gradient: const LinearGradient(
+                          colors: [AppColors.primaryBlue, AppColors.accentBlue],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(14),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primaryBlue.withValues(alpha: 0.2),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: Colors.white.withValues(alpha: 0.2),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text(
+                                  'RESIDENT PRO',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                    color: Colors.white,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ),
+                              const Spacer(),
+                              const Text(
+                                '₹29 / mo',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+                          _buildFeatureBullet('100% Ad-Free Clean Community Feed'),
+                          _buildFeatureBullet('Priority Alert Dispatch in 3.0 km Radius'),
+                          _buildFeatureBullet('Verified Resident Shield Icon on Profile'),
+                          const SizedBox(height: 16),
+                          SizedBox(
+                            width: double.infinity,
+                            height: 44,
+                            child: ElevatedButton(
+                              onPressed: _isUpgrading ? null : _upgradeToPro,
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                foregroundColor: AppColors.primaryBlue,
+                                elevation: 0,
+                              ),
+                              child: _isUpgrading
+                                  ? const SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : const Text('Upgrade for ₹29 / Month'),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // 3. Geofence Radius Slider
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceCard,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.borderSubtle),
+                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Flexible(
-                              child: Text(
-                                _aliasName,
-                                style: const TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.textPrimary,
-                                ),
-                                overflow: TextOverflow.ellipsis,
+                            const Text(
+                              'Neighborhood Radius Range',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textPrimary,
                               ),
                             ),
-                            const SizedBox(width: 6),
-                            Container(
-                              padding: const EdgeInsets.all(3),
-                              decoration: const BoxDecoration(
-                                color: AppColors.verifiedGreenBg,
-                                shape: BoxShape.circle,
-                              ),
-                              child: const Icon(
-                                Icons.verified,
-                                size: 14,
-                                color: AppColors.verifiedGreen,
+                            Text(
+                              '${(_radiusMeters / 1000).toStringAsFixed(1)} km',
+                              style: const TextStyle(
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.primaryBlue,
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          isPro ? 'Resident Pro Member' : 'Standard Resident',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500,
-                            color: isPro ? AppColors.accentBlue : AppColors.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // 2. Pro Tier Upgrade Card
-            if (!isPro) ...[
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [AppColors.primaryBlue, AppColors.accentBlue],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(14),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppColors.primaryBlue.withValues(alpha: 0.2),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: const Text(
-                            'RESIDENT PRO',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
-                        ),
-                        const Spacer(),
+                        const SizedBox(height: 6),
                         const Text(
-                          '₹29 / mo',
+                          'Controls the boundary for community posts and emergency notifications.',
                           style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
                           ),
+                        ),
+                        Slider(
+                          value: _radiusMeters,
+                          min: 500,
+                          max: 5000,
+                          divisions: 9,
+                          activeColor: AppColors.primaryBlue,
+                          inactiveColor: AppColors.borderSubtle,
+                          onChanged: (val) => _syncRadius(val),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 14),
-                    _buildFeatureBullet('100% Ad-Free Clean Community Feed'),
-                    _buildFeatureBullet('Priority Alert Dispatch in 3.0 km Radius'),
-                    _buildFeatureBullet('Verified Resident Shield Icon on Profile'),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      height: 44,
-                      child: ElevatedButton(
-                        onPressed: _isUpgrading ? null : _upgradeToPro,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: AppColors.primaryBlue,
-                          elevation: 0,
-                        ),
-                        child: _isUpgrading
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Text('Upgrade for ₹29 / Month'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 24),
-            ],
+                  ),
+                  const SizedBox(height: 24),
 
-            // 3. Geofence Radius Slider
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: AppColors.surfaceCard,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.borderSubtle),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Neighborhood Radius Range',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textPrimary,
-                        ),
+                  // 4. DPDP 1-Click Data Erasure Button
+                  Center(
+                    child: TextButton.icon(
+                      onPressed: _confirmDeleteAccount,
+                      icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.sosRed),
+                      label: const Text(
+                        'Delete Account & Erase All Data',
+                        style: TextStyle(color: AppColors.sosRed, fontWeight: FontWeight.w600),
                       ),
-                      Text(
-                        '${(_radiusMeters / 1000).toStringAsFixed(1)} km',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.primaryBlue,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Controls the boundary for community posts and emergency notifications.',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
                     ),
-                  ),
-                  Slider(
-                    value: _radiusMeters,
-                    min: 500,
-                    max: 5000,
-                    divisions: 9,
-                    activeColor: AppColors.primaryBlue,
-                    inactiveColor: AppColors.borderSubtle,
-                    onChanged: (val) => _syncRadius(val),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 24),
-
-            // 4. DPDP 1-Click Data Erasure Button
-            Center(
-              child: TextButton.icon(
-                onPressed: _confirmDeleteAccount,
-                icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.sosRed),
-                label: const Text(
-                  'Delete Account & Erase All Data',
-                  style: TextStyle(color: AppColors.sosRed, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 

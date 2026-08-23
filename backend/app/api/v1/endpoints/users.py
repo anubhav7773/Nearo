@@ -1,14 +1,20 @@
 import secrets
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.deps import get_current_user, get_current_user_optional
 from app.core.database import get_db
 from app.models.user import SubscriptionTier, User, UserLocation, UserRole
-from app.schemas.user import UserProfileResponse, UserProfileSyncRequest
+from app.schemas.user import (
+    UserDeleteResponse,
+    UserProfileResponse,
+    UserProfileSyncRequest,
+    UserRadiusUpdateRequest,
+)
 
 router = APIRouter()
 
@@ -96,11 +102,17 @@ async def sync_user_profile(
     loc_res = await db.execute(loc_stmt)
     loc = loc_res.scalar_one_or_none()
     radius_meters = (
-        getattr(loc, "preferred_radius_meters", 1500)
-        if loc and hasattr(loc, "preferred_radius_meters")
+        loc.preferred_radius_meters
+        if loc and hasattr(loc, "preferred_radius_meters") and loc.preferred_radius_meters
         else 1500
     )
     radius_km = radius_meters / 1000.0
+
+    created_at_val = (
+        user.created_at
+        if hasattr(user, "created_at") and isinstance(user.created_at, datetime)
+        else None
+    )
 
     return UserProfileResponse(
         id=user.id,
@@ -111,7 +123,7 @@ async def sync_user_profile(
         radius_km=radius_km,
         tier=user.tier.value if hasattr(user.tier, "value") else str(user.tier),
         is_verified=user.is_verified,
-        created_at=user.created_at,
+        created_at=created_at_val,
     )
 
 
@@ -129,11 +141,17 @@ async def get_user_profile_me(
     loc_res = await db.execute(loc_stmt)
     loc = loc_res.scalar_one_or_none()
     radius_meters = (
-        getattr(loc, "preferred_radius_meters", 1500)
-        if loc and hasattr(loc, "preferred_radius_meters")
+        loc.preferred_radius_meters
+        if loc and hasattr(loc, "preferred_radius_meters") and loc.preferred_radius_meters
         else 1500
     )
     radius_km = radius_meters / 1000.0
+
+    created_at_val = (
+        current_user.created_at
+        if hasattr(current_user, "created_at") and isinstance(current_user.created_at, datetime)
+        else None
+    )
 
     return UserProfileResponse(
         id=current_user.id,
@@ -148,5 +166,79 @@ async def get_user_profile_me(
             else str(current_user.tier)
         ),
         is_verified=current_user.is_verified,
-        created_at=current_user.created_at,
+        created_at=created_at_val,
+    )
+
+
+@router.patch(
+    "/me/radius",
+    response_model=UserProfileResponse,
+    summary="Update Neighborhood Spatial Radius",
+    description="Updates the resident's active hyperlocal radius boundary (0.5 km to 5.0 km).",
+)
+async def update_user_radius(
+    payload: UserRadiusUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    radius_meters = int(payload.radius_km * 1000)
+
+    loc_stmt = select(UserLocation).where(UserLocation.user_id == current_user.id)
+    loc_res = await db.execute(loc_stmt)
+    loc = loc_res.scalar_one_or_none()
+
+    if loc and hasattr(loc, "preferred_radius_meters"):
+        loc.preferred_radius_meters = radius_meters
+    else:
+        # Create user location preference
+        point_geom = func.ST_SetSRID(func.ST_MakePoint(82.1998, 26.7922), 4326)
+        loc = UserLocation(
+            user_id=current_user.id,
+            last_known_location=point_geom,
+            pincode="224001",
+            preferred_radius_meters=radius_meters,
+        )
+        db.add(loc)
+
+    await db.commit()
+
+    created_at_val = (
+        current_user.created_at
+        if hasattr(current_user, "created_at") and isinstance(current_user.created_at, datetime)
+        else None
+    )
+
+    return UserProfileResponse(
+        id=current_user.id,
+        clerk_user_id=current_user.clerk_user_id,
+        alias=current_user.alias_name,
+        email=current_user.email,
+        avatar_url=current_user.avatar_url,
+        radius_km=payload.radius_km,
+        tier=(
+            current_user.tier.value
+            if hasattr(current_user.tier, "value")
+            else str(current_user.tier)
+        ),
+        is_verified=current_user.is_verified,
+        created_at=created_at_val,
+    )
+
+
+@router.delete(
+    "/me",
+    response_model=UserDeleteResponse,
+    summary="DPDP Hard Account Deletion",
+    description="Permanently deletes user profile and cascades removal of all associated data.",
+)
+async def delete_user_account(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await db.delete(current_user)
+    await db.commit()
+
+    return UserDeleteResponse(
+        status="success",
+        message="All personal data erased permanently.",
     )
