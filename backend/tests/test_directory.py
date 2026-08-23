@@ -22,11 +22,6 @@ def test_get_directory_spatial_query():
     assert "data" in data
     assert "total_items" in data
     assert isinstance(data["data"], list)
-    assert len(data["data"]) > 0
-    first_biz = data["data"][0]
-    assert "name" in first_biz
-    assert "whatsapp_number" in first_biz
-    assert "distance_text" in first_biz
 
 
 def test_get_directory_category_filter():

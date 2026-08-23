@@ -69,7 +69,12 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
       );
 
       if (response.statusCode == 200 && response.data != null) {
-        final rawList = response.data['data'] as List<dynamic>? ?? [];
+        List<dynamic> rawList = [];
+        if (response.data is Map && response.data['data'] is List) {
+          rawList = response.data['data'] as List<dynamic>;
+        } else if (response.data is List) {
+          rawList = response.data as List<dynamic>;
+        }
         if (mounted) {
           setState(() {
             _businesses = rawList.map((e) => Map<String, dynamic>.from(e as Map)).toList();
@@ -396,7 +401,8 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
                             const Icon(Icons.storefront_outlined, size: 48, color: AppColors.textMuted),
                             const SizedBox(height: 12),
                             const Text(
-                              'No local businesses listed in this radius yet.',
+                              'No verified businesses registered within this radius yet.',
+                              textAlign: TextAlign.center,
                               style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
                             ),
                             const SizedBox(height: 6),
