@@ -149,3 +149,12 @@ class UserRadiusUpdateRequest(BaseModel):
 class UserDeleteResponse(BaseModel):
     status: str = "success"
     message: str = "All personal data erased permanently."
+
+
+class FCMTokenSyncRequest(BaseModel):
+    fcm_token: str = Field(..., min_length=10, description="Firebase Cloud Messaging device registration token")
+
+
+class FCMTokenSyncResponse(BaseModel):
+    success: bool = True
+    message: str = "FCM token updated successfully"

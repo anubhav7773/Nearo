@@ -22,12 +22,20 @@ def get_firebase_app():
             return firebase_admin.get_app()
 
         cred = None
-        if settings.FIREBASE_CREDENTIALS_JSON:
+        service_account_raw = (
+            settings.FIREBASE_SERVICE_ACCOUNT
+            or settings.FIREBASE_SERVICE_ACCOUNT_JSON
+            or settings.FIREBASE_CREDENTIALS_JSON
+            or os.getenv("FIREBASE_SERVICE_ACCOUNT")
+            or os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON")
+        )
+
+        if service_account_raw:
             try:
-                cert_dict = json.loads(settings.FIREBASE_CREDENTIALS_JSON)
+                cert_dict = json.loads(service_account_raw)
                 cred = credentials.Certificate(cert_dict)
             except Exception as e:
-                logger.warning("Failed to parse FIREBASE_CREDENTIALS_JSON: %s", str(e))
+                logger.warning("Failed to parse FIREBASE_SERVICE_ACCOUNT JSON: %s", str(e))
 
         elif settings.FIREBASE_SERVICE_ACCOUNT_PATH and os.path.exists(
             settings.FIREBASE_SERVICE_ACCOUNT_PATH
@@ -39,7 +47,7 @@ def get_firebase_app():
         else:
             # Initialize with default credentials or project id
             app = firebase_admin.initialize_app(
-                options={"projectId": settings.FIREBASE_PROJECT_ID or "nearo-app"}
+                options={"projectId": settings.FIREBASE_PROJECT_ID or "nearo-org"}
             )
 
         _firebase_initialized = True
@@ -70,7 +78,6 @@ def verify_firebase_token(token: str) -> dict[str, Any]:
         raise ValueError(f"Token is not a Firebase token: {e}") from e
 
     try:
-        import firebase_admin
         from firebase_admin import auth
 
         get_firebase_app()

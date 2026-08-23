@@ -50,6 +50,7 @@ class User(Base):
     auth_provider = Column(String(50), default="firebase", nullable=False)
     alias_name = Column(String(50), nullable=False)
     avatar_url = Column(Text, nullable=True)
+    fcm_token = Column(Text, nullable=True, index=True)
     role = Column(
         Enum(
             UserRole,

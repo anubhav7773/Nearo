@@ -242,3 +242,31 @@ async def delete_user_account(
         status="success",
         message="All personal data erased permanently.",
     )
+
+
+@router.post(
+    "/me/fcm-token",
+    response_model=dict,
+    summary="Update Device FCM Registration Token",
+    description=(
+        "Registers or updates the resident device Firebase Cloud Messaging "
+        "token for emergency push notifications."
+    ),
+)
+async def update_fcm_token(
+    payload: dict,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    token = payload.get("fcm_token") or payload.get("token")
+    if not token or not isinstance(token, str):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Field 'fcm_token' must be a valid non-empty string.",
+        )
+
+    current_user.fcm_token = token.strip()
+    await db.commit()
+    await db.refresh(current_user)
+
+    return {"success": True, "message": "FCM token updated successfully"}

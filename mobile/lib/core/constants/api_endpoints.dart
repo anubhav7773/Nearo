@@ -18,6 +18,7 @@ class ApiEndpoints {
   static const String userSync = '/users/sync';
   static const String usersMe = '/users/me';
   static const String userRadius = '/users/me/radius';
+  static const String userFcmToken = '/users/me/fcm-token';
   static const String deleteUserMe = '/users/me';
   static const String me = '/auth/me';
   static const String deleteAccount = '/users/me';

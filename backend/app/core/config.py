@@ -17,16 +17,12 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60  # 60 minutes lifetime
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30  # 30 days sliding refresh
 
-    # Firebase Authentication (Phone OTP, Google One-Tap, Email Verification)
-    FIREBASE_PROJECT_ID: str | None = "nearo-app"
+    # Firebase Configuration (Production Auth & FCM Cloud Messaging)
+    FIREBASE_PROJECT_ID: str | None = "nearo-org"
+    FIREBASE_SERVICE_ACCOUNT: str | None = None
+    FIREBASE_SERVICE_ACCOUNT_JSON: str | None = None
     FIREBASE_CREDENTIALS_JSON: str | None = None
     FIREBASE_SERVICE_ACCOUNT_PATH: str | None = None
-
-    # Legacy Clerk Authentication Settings (Deprecated)
-    CLERK_PUBLISHABLE_KEY: str | None = None
-    CLERK_SECRET_KEY: str | None = None
-    CLERK_ISSUER_URL: str | None = None
-    CLERK_JWKS_URL: str | None = "https://api.clerk.com/v1/jwks"
 
     # Supabase PostgreSQL 16 + PostGIS Spatial Database (Mumbai AWS pooler)
     POSTGRES_SERVER: str = "localhost"

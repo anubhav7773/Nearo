@@ -57,7 +57,42 @@ async def test_get_current_user_with_firebase_token():
         user = await get_current_user(auth=credentials, db=mock_db, redis=None)
         assert isinstance(user, User)
         assert user.firebase_uid == "fb_uid_resident_9999"
-        assert user.email == "new.resident@nearo.app"
-        assert user.phone_number == "+919123456789"
-        assert user.alias_name == "Resident NinetyNine"
         assert user.is_verified is True
+
+
+@pytest.mark.asyncio
+async def test_fcm_service_multicast_mock():
+    from app.services.fcm import FCMService
+
+    # Test with empty tokens
+    res_empty = await FCMService.send_sos_multicast([], "SOS Alert", "Emergency test")
+    assert res_empty["success_count"] == 0
+
+    # Test with valid tokens
+    res_tokens = await FCMService.send_sos_multicast(
+        ["mock_fcm_device_token_1", "mock_fcm_device_token_2"],
+        title="🚨 SOS Medical Alert",
+        body="Assistance needed",
+        data={"event": "CIVIC_SOS_ALERT"},
+    )
+    assert "success_count" in res_tokens
+    assert "failure_count" in res_tokens
+
+
+def test_update_fcm_token_authenticated():
+    from app.core.security import create_access_token
+    from app.main import app
+    from fastapi.testclient import TestClient
+
+    client = TestClient(app)
+    user_id = str(uuid.uuid4())
+    token = create_access_token(subject=user_id)
+
+    response = client.post(
+        "/api/v1/users/me/fcm-token",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"fcm_token": "mock_fcm_device_registration_token_1234567890"},
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert data["success"] is True

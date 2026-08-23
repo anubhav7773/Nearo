@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'core/constants/colors.dart';
 import 'core/network/api_client.dart';
 import 'core/network/secure_storage.dart';
+import 'core/services/fcm_service.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/screens/otp_login_screen.dart';
 import 'features/feed/presentation/bloc/feed_bloc.dart';
@@ -17,6 +18,7 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   try {
     await Firebase.initializeApp();
+    await FCMNotificationService().initialize();
   } catch (_) {}
   runApp(const NearoApp());
 }
