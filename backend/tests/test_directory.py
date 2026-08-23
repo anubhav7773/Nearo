@@ -82,3 +82,27 @@ def test_register_business_unauthorized():
         },
     )
     assert response.status_code == 401
+
+
+def test_register_business_with_lat_lng_aliases():
+    """Verify business registration with lat and lng aliases."""
+    user_id = str(uuid.uuid4())
+    token = create_access_token(subject=user_id)
+
+    response = client.post(
+        "/api/v1/directory/register",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "name": "Awadh Dairy & Sweets",
+            "category": "grocery",
+            "description": "Pure milk and dairy products.",
+            "whatsapp_number": "9876543210",
+            "lat": 26.7935,
+            "lng": 82.2010,
+        },
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["name"] == "Awadh Dairy & Sweets"
+    assert data["status"] == "active"
+    assert "id" in data

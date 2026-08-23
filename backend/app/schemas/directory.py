@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class BusinessRegisterRequest(BaseModel):
@@ -13,8 +13,20 @@ class BusinessRegisterRequest(BaseModel):
     whatsapp_number: str = Field(
         ..., pattern=r"^\+?[0-9]{10,15}$", description="WhatsApp contact number with country code"
     )
-    latitude: float = Field(..., ge=-90.0, le=90.0)
-    longitude: float = Field(..., ge=-180.0, le=180.0)
+    latitude: float | None = Field(None, ge=-90.0, le=90.0)
+    longitude: float | None = Field(None, ge=-180.0, le=180.0)
+    lat: float | None = Field(None, ge=-90.0, le=90.0, description="Alias for latitude")
+    lng: float | None = Field(None, ge=-180.0, le=180.0, description="Alias for longitude")
+
+    @model_validator(mode="after")
+    def validate_coordinates(self):
+        if self.latitude is None and self.lat is not None:
+            self.latitude = self.lat
+        if self.longitude is None and self.lng is not None:
+            self.longitude = self.lng
+        if self.latitude is None or self.longitude is None:
+            raise ValueError("Coordinates ('latitude'/'longitude' or 'lat'/'lng') are required.")
+        return self
 
 
 class BusinessRegisterResponse(BaseModel):

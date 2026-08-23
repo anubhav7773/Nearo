@@ -118,7 +118,7 @@ class _DirectoryScreenState extends State<DirectoryScreen> {
     }
 
     final message = Uri.encodeComponent(
-      'Hello $businessName! I found your listing on the Nearo neighborhood network.',
+      'Hello I found your listing on Nearo',
     );
 
     final nativeUri = Uri.parse('whatsapp://send?phone=$cleanDigits&text=$message');
