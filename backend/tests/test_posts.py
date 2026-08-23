@@ -70,3 +70,25 @@ def test_toggle_post_upvote_endpoint():
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code in (200, 404)
+
+
+def test_create_post_with_body_and_lat_lng_aliases():
+    """Verify post creation works with body, lat, lng schema aliases."""
+    user_id = str(uuid.uuid4())
+    token = create_access_token(subject=user_id)
+
+    response = client.post(
+        "/api/v1/posts",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "title": "Water Shortage in Sector 7",
+            "body": "No water supply since morning.",
+            "category": "civic_issue",
+            "lat": 26.7930,
+            "lng": 82.2005,
+        },
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["status"] == "published"
+    assert "id" in data
