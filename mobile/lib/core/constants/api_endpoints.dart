@@ -23,10 +23,6 @@ class ApiEndpoints {
   static const String me = '/auth/me';
   static const String deleteAccount = '/users/me';
 
-  // Legacy SMS OTP Routes
-  static const String sendOtp = '/auth/otp/send';
-  static const String verifyOtp = '/auth/otp/verify';
-
   // Posts & Feed Routes
   static const String feed = '/posts/feed';
   static const String posts = '/posts';

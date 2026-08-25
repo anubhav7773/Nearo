@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:dio/dio.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../constants/api_endpoints.dart';
 import 'secure_storage.dart';
 
@@ -34,35 +35,27 @@ class ApiClient {
           return handler.next(options);
         },
         onError: (DioException error, handler) async {
-          // Handle 401 Unauthorized for token refresh
+          // Handle 401 Unauthorized by force-refreshing the Firebase ID token.
+          // Firebase ID tokens expire hourly; the Firebase SDK is the only
+          // refresh authority now that Nearo is Google Sign-In only.
           if (error.response?.statusCode == 401) {
-            final refreshToken = await SecureStorageService.getRefreshToken();
-            if (refreshToken != null && refreshToken.isNotEmpty) {
-              try {
-                // Attempt token refresh
-                final refreshResponse = await Dio(
-                  BaseOptions(baseUrl: ApiEndpoints.baseUrl),
-                ).post(
-                  ApiEndpoints.verifyOtp,
-                  data: {'refresh_token': refreshToken},
-                );
+            try {
+              final firebaseUser = FirebaseAuth.instance.currentUser;
+              final refreshedToken = await firebaseUser?.getIdToken(true);
 
-                if (refreshResponse.statusCode == 200 && refreshResponse.data != null) {
-                  final newAccessToken = refreshResponse.data['access_token'];
-                  if (newAccessToken != null) {
-                    await SecureStorageService.saveAccessToken(newAccessToken.toString());
+              if (refreshedToken != null && refreshedToken.isNotEmpty) {
+                await SecureStorageService.saveAccessToken(refreshedToken);
 
-                    // Retry original request with new access token
-                    final retryOptions = error.requestOptions;
-                    retryOptions.headers['Authorization'] = 'Bearer $newAccessToken';
-                    final retryResponse = await dio.fetch(retryOptions);
-                    return handler.resolve(retryResponse);
-                  }
-                }
-              } catch (_) {}
-            }
+                // Retry original request with the refreshed ID token
+                final retryOptions = error.requestOptions;
+                retryOptions.headers['Authorization'] = 'Bearer $refreshedToken';
+                final retryResponse = await dio.fetch(retryOptions);
+                return handler.resolve(retryResponse);
+              }
+            } catch (_) {}
 
-            // If refresh fails or no refresh token, clear invalid session & notify
+            // If refresh fails or there is no signed-in Google account,
+            // clear the invalid session & notify.
             await SecureStorageService.clearSession();
             onUnauthorized?.call();
           }

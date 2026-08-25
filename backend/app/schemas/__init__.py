@@ -15,9 +15,10 @@ from app.schemas.sos import (
     SOSEventDetail,
 )
 from app.schemas.user import (
-    OTPSendRequest,
-    OTPSendResponse,
-    OTPVerifyRequest,
+    EmailSendCodeRequest,
+    EmailSendCodeResponse,
+    EmailVerifyCodeRequest,
+    GoogleOAuthRequest,
     TokenResponse,
     UserLocationResponse,
     UserLocationUpdate,
@@ -26,11 +27,12 @@ from app.schemas.user import (
 )
 
 __all__ = [
+    "EmailSendCodeRequest",
+    "EmailSendCodeResponse",
+    "EmailVerifyCodeRequest",
     "FeedResponse",
+    "GoogleOAuthRequest",
     "NativeAdResponse",
-    "OTPSendRequest",
-    "OTPSendResponse",
-    "OTPVerifyRequest",
     "PostCreate",
     "PostCreateResponse",
     "PostResponse",

@@ -11,7 +11,6 @@ from app.core.security import (
 from app.models.user import SubscriptionTier
 from app.schemas.ad import NativeAdResponse
 from app.schemas.post import PostResponse
-from app.schemas.user import OTPSendRequest, OTPVerifyRequest
 from app.services.ad_engine import AdEngine
 from app.services.geo_service import apply_coordinate_jitter
 
@@ -88,9 +87,11 @@ def test_ad_engine_injection_and_pro_exclusion():
     assert all(getattr(item, "type", None) == "community_post" for item in pro_feed)
 
 
-def test_otp_schemas():
-    req = OTPSendRequest(phone_number="+919876543210")
-    assert req.phone_number == "+919876543210"
+def test_otp_schemas_are_removed():
+    """Phone/SMS OTP request models are permanently purged from the schema layer."""
+    import app.schemas as schemas
+    import app.schemas.user as user_schemas
 
-    v_req = OTPVerifyRequest(session_id="dummy-session", otp="482910")
-    assert v_req.otp == "482910"
+    for name in ("OTPSendRequest", "OTPSendResponse", "OTPVerifyRequest"):
+        assert not hasattr(user_schemas, name)
+        assert name not in schemas.__all__

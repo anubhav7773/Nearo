@@ -173,8 +173,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.logout, color: AppColors.textSecondary),
-            onPressed: () async {
-              await SecureStorageService.clearSession();
+            onPressed: () {
+              // Delegates to the AuthBloc's SignOutRequested, which also revokes
+              // the cached Google/Firebase session before clearing local storage.
               widget.onLogout();
             },
           ),

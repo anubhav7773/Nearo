@@ -51,27 +51,6 @@ class GoogleOAuthRequest(BaseModel):
     )
 
 
-# Legacy / Mobile SMS OTP Schemas (for backwards compatibility)
-class OTPSendRequest(BaseModel):
-    phone_number: str = Field(
-        ..., pattern=r"^\+?[1-9]\d{7,14}$", description="E.164 phone number format"
-    )
-
-
-class OTPSendResponse(BaseModel):
-    success: bool = True
-    message: str = "OTP sent successfully"
-    session_id: str
-
-
-class OTPVerifyRequest(BaseModel):
-    session_id: str
-    otp: str = Field(..., min_length=4, max_length=6, description="Received OTP code")
-    alias_name: str | None = Field(
-        None, min_length=3, max_length=50, description="Neighborhood alias name"
-    )
-
-
 class UserPublic(BaseModel):
     id: uuid.UUID
     alias_name: str

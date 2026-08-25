@@ -3,10 +3,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'core/constants/colors.dart';
 import 'core/network/api_client.dart';
-import 'core/network/secure_storage.dart';
 import 'core/services/fcm_service.dart';
 import 'core/theme/app_theme.dart';
-import 'features/auth/presentation/screens/otp_login_screen.dart';
+import 'features/auth/presentation/bloc/auth_bloc.dart';
+import 'features/auth/presentation/bloc/auth_event.dart';
+import 'features/auth/presentation/bloc/auth_state.dart';
+import 'features/auth/presentation/screens/login_screen.dart';
 import 'features/feed/presentation/bloc/feed_bloc.dart';
 import 'features/feed/presentation/screens/directory_screen.dart';
 import 'features/feed/presentation/screens/feed_screen.dart';
@@ -31,6 +33,8 @@ class NearoApp extends StatefulWidget {
 }
 
 class _NearoAppState extends State<NearoApp> {
+  final AuthBloc _authBloc = AuthBloc();
+
   bool _isAuthenticated = false;
   bool _isCheckingAuth = true;
 
@@ -42,17 +46,13 @@ class _NearoAppState extends State<NearoApp> {
         setState(() => _isAuthenticated = false);
       }
     };
-    _checkInitialSession();
+    _authBloc.add(CheckAuthStatus());
   }
 
-  Future<void> _checkInitialSession() async {
-    final token = await SecureStorageService.getAccessToken();
-    if (mounted) {
-      setState(() {
-        _isAuthenticated = token != null && token.isNotEmpty;
-        _isCheckingAuth = false;
-      });
-    }
+  @override
+  void dispose() {
+    _authBloc.close();
+    super.dispose();
   }
 
   void _onLoginSuccess() {
@@ -60,13 +60,14 @@ class _NearoAppState extends State<NearoApp> {
   }
 
   void _onLogout() {
-    setState(() => _isAuthenticated = false);
+    _authBloc.add(SignOutRequested());
   }
 
   @override
   Widget build(BuildContext context) {
     return MultiBlocProvider(
       providers: [
+        BlocProvider<AuthBloc>.value(value: _authBloc),
         BlocProvider<FeedBloc>(create: (_) => FeedBloc()),
         BlocProvider<SosBloc>(create: (_) => SosBloc()),
       ],
@@ -74,16 +75,33 @@ class _NearoAppState extends State<NearoApp> {
         title: 'Nearo',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
-        home: _isCheckingAuth
-            ? const Scaffold(
-                backgroundColor: AppColors.background,
-                body: Center(
-                  child: CircularProgressIndicator(color: AppColors.primaryBlue),
-                ),
-              )
-            : _isAuthenticated
-                ? MainNavigationScreen(onLogout: _onLogout)
-                : OtpLoginScreen(onLoginSuccess: _onLoginSuccess),
+        home: BlocListener<AuthBloc, AuthState>(
+          listener: (context, state) {
+            // AuthLoading is deliberately ignored so LoginScreen keeps rendering
+            // its own inline spinner mid sign-in.
+            if (state is AuthAuthenticated) {
+              setState(() {
+                _isAuthenticated = true;
+                _isCheckingAuth = false;
+              });
+            } else if (state is AuthUnauthenticated || state is AuthFailure) {
+              setState(() {
+                _isAuthenticated = false;
+                _isCheckingAuth = false;
+              });
+            }
+          },
+          child: _isCheckingAuth
+              ? const Scaffold(
+                  backgroundColor: AppColors.background,
+                  body: Center(
+                    child: CircularProgressIndicator(color: AppColors.primaryBlue),
+                  ),
+                )
+              : _isAuthenticated
+                  ? MainNavigationScreen(onLogout: _onLogout)
+                  : LoginScreen(onLoginSuccess: _onLoginSuccess),
+        ),
       ),
     );
   }
