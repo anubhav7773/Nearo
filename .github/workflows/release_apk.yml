@@ -48,7 +48,7 @@ jobs:
       - name: Build Android Release APK
         run: |
           cd mobile
-          flutter build apk --release --split-per-abi=false
+          flutter build apk --release
 
       - name: Generate Build Metadata
         id: meta
