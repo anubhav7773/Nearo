@@ -44,6 +44,10 @@ class SOSEvent(Base):
         String(50), nullable=False, default="security"
     )  # 'medical', 'security', 'fire', 'scam', 'other'
     description = Column(Text, nullable=True)
+    location = Column(
+        Geometry(geometry_type="POINT", srid=4326),
+        nullable=True,
+    )
     initial_location = Column(
         Geometry(geometry_type="POINT", srid=4326),
         nullable=False,

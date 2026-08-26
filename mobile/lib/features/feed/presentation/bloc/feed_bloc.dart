@@ -207,6 +207,25 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
   }
 
   Future<void> _onCreatePost(CreatePostEvent event, Emitter<FeedState> emit) async {
+    double validLat = event.latitude;
+    double validLng = event.longitude;
+
+    if (validLat == 0.0 && validLng == 0.0) {
+      try {
+        final pos = await Geolocator.getLastKnownPosition();
+        if (pos != null && pos.latitude != 0.0) {
+          validLat = pos.latitude;
+          validLng = pos.longitude;
+        } else {
+          validLat = 26.7922;
+          validLng = 82.1998;
+        }
+      } catch (_) {
+        validLat = 26.7922;
+        validLng = 82.1998;
+      }
+    }
+
     try {
       final response = await _apiClient.dio.post(
         ApiEndpoints.posts,
@@ -214,8 +233,8 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
           'title': event.title,
           'content': event.content,
           'category': event.category,
-          'latitude': event.latitude,
-          'longitude': event.longitude,
+          'latitude': validLat,
+          'longitude': validLng,
         },
       );
 

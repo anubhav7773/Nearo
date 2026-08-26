@@ -41,6 +41,7 @@ class AlertService:
             triggered_by=user_id,
             category=cat_val,
             description=description,
+            location=point_geom,
             initial_location=point_geom,
             current_location=point_geom,
             status=SOSStatus.ACTIVE,
