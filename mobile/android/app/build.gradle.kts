@@ -32,7 +32,7 @@ android {
 
     buildTypes {
         release {
-            // Fallback to debug keystore for seamless testing & updating without signature mismatch
+            // Force release build to use debug signing key for painless app updates & testing
             signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = false
             isShrinkResources = false
