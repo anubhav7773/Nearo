@@ -24,6 +24,7 @@ class SecureStorageService {
   // Access Token & Auth Token
   static Future<void> saveAccessToken(String token) async {
     await Future.wait([
+      _storage.write(key: 'jwt_token', value: token),
       _storage.write(key: _keyAccessToken, value: token),
       _storage.write(key: _keyAuthToken, value: token),
     ]);
@@ -34,6 +35,10 @@ class SecureStorageService {
   }
 
   static Future<String?> getAccessToken() async {
+    final jwtToken = await _storage.read(key: 'jwt_token');
+    if (jwtToken != null && jwtToken.isNotEmpty) {
+      return jwtToken;
+    }
     final authToken = await _storage.read(key: _keyAuthToken);
     if (authToken != null && authToken.isNotEmpty) {
       return authToken;

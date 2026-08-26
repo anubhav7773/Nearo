@@ -35,7 +35,7 @@ class FCMNotificationService {
         print('FCM Permission Status: ${settings.authorizationStatus}');
       }
 
-      // 2. Setup token refresh listener (syncs if authenticated)
+      // 2. Setup token refresh listener (syncs only if authenticated)
       messaging.onTokenRefresh.listen((newToken) {
         syncTokenToBackend(newToken);
       });
@@ -55,14 +55,14 @@ class FCMNotificationService {
     }
   }
 
-  /// Sends the current FCM device token to the backend only when an authentication JWT is present.
+  /// Sends the current FCM device token to the backend only when an authentication JWT is present in secure storage.
   Future<void> syncTokenToBackend([String? token]) async {
     try {
-      final authToken = await SecureStorageService.getAccessToken();
-      if (authToken == null || authToken.trim().isEmpty) {
-        // User not logged in yet -> Gracefully abort sync until AuthBloc emits authenticated state
+      // Ensure FCM token sync only runs AFTER user is authenticated and JWT exists in secure storage
+      final jwtToken = await SecureStorageService.getAccessToken();
+      if (jwtToken == null || jwtToken.trim().isEmpty) {
         if (kDebugMode) {
-          print('FCM Sync deferred: No active authentication session.');
+          print('FCM Sync deferred: No active authentication session (jwt_token not found).');
         }
         return;
       }
@@ -70,6 +70,7 @@ class FCMNotificationService {
       final fcmToken = token ?? await FirebaseMessaging.instance.getToken();
       if (fcmToken == null || fcmToken.trim().isEmpty) return;
 
+      // Proceed with POST /api/v1/users/me/fcm-token
       await _apiClient.dio.post(
         ApiEndpoints.userFcmToken,
         data: {'fcm_token': fcmToken},
