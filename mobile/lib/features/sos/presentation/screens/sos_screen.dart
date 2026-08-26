@@ -7,6 +7,7 @@ import '../../../../core/constants/colors.dart';
 import '../bloc/sos_bloc.dart';
 import '../bloc/sos_event.dart';
 import '../bloc/sos_state.dart';
+import '../widgets/offline_sos_modal.dart';
 
 class SosScreen extends StatefulWidget {
   const SosScreen({super.key});
@@ -151,6 +152,15 @@ class _SosScreenState extends State<SosScreen> with SingleTickerProviderStateMix
         );
   }
 
+  void _openOfflineModal() {
+    OfflineSosModal.show(
+      context,
+      latitude: _userLat,
+      longitude: _userLng,
+      emergencyType: _selectedType,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -164,11 +174,26 @@ class _SosScreenState extends State<SosScreen> with SingleTickerProviderStateMix
             color: AppColors.textPrimary,
           ),
         ),
+        actions: [
+          IconButton(
+            tooltip: 'Offline Emergency Dialer & SMS',
+            icon: const Icon(Icons.offline_bolt_outlined, color: AppColors.sosRed),
+            onPressed: _openOfflineModal,
+          ),
+        ],
       ),
       body: BlocConsumer<SosBloc, SosState>(
         listener: (context, state) {
           if (state is SosActiveState) {
             HapticFeedback.heavyImpact();
+          } else if (state is SosOfflineFailureState) {
+            HapticFeedback.heavyImpact();
+            OfflineSosModal.show(
+              context,
+              latitude: state.latitude,
+              longitude: state.longitude,
+              emergencyType: state.emergencyType,
+            );
           }
         },
         builder: (context, state) {
@@ -425,6 +450,38 @@ class _SosScreenState extends State<SosScreen> with SingleTickerProviderStateMix
                         ),
                       ),
                     ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // Offline Emergency Fallback Button Card
+                InkWell(
+                  onTap: _openOfflineModal,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    decoration: BoxDecoration(
+                      color: AppColors.sosRed.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: AppColors.sosRed.withValues(alpha: 0.3)),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.offline_bolt, size: 18, color: AppColors.sosRed),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Offline Emergency Mode: 1-Tap 112 Dial & Direct SMS',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.sosRed,
+                            ),
+                          ),
+                        ),
+                        Icon(Icons.chevron_right, size: 18, color: AppColors.sosRed),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 24),

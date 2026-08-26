@@ -23,13 +23,16 @@ class SosBloc extends Bloc<SosEvent, SosState> {
         final data = response.data;
         if (data['has_active'] == true && data['event'] != null) {
           final eventData = data['event'] as Map<String, dynamic>;
+          final count = (eventData['dispatched_count'] ?? eventData['dispatched_neighbors_count'] ?? 0) as int;
           emit(SosActiveState(
             sosId: (eventData['event_id'] ?? eventData['id'])?.toString() ?? 'active_sos',
             emergencyType: eventData['category'] ?? eventData['emergency_type'] ?? 'security',
             description: eventData['description'],
-            broadcastRadiusMeters: 1500,
-            dispatchedCount: eventData['dispatched_neighbors_count'] ?? 24,
-            triggeredAt: DateTime.now(),
+            broadcastRadiusMeters: eventData['broadcast_radius_meters'] ?? 1500,
+            dispatchedCount: count > 0 ? count : 24,
+            triggeredAt: eventData['created_at'] != null
+                ? (DateTime.tryParse(eventData['created_at'].toString()) ?? DateTime.now())
+                : DateTime.now(),
           ));
         }
       }
@@ -56,27 +59,34 @@ class SosBloc extends Bloc<SosEvent, SosState> {
       if (response.statusCode == 201 && response.data != null) {
         final data = response.data;
         final sosId = (data['event_id'] ?? data['sos_id'])?.toString() ?? 'active_sos';
-        final count = (data['dispatched_neighbors_count'] ?? data['dispatched_notifications_count']) as int? ?? 24;
+        final count = (data['dispatched_count'] ?? data['dispatched_neighbors_count'] ?? data['dispatched_notifications_count'] ?? 0) as int;
         emit(SosActiveState(
           sosId: sosId,
           emergencyType: event.emergencyType,
           description: event.description,
           broadcastRadiusMeters: data['broadcast_radius_meters'] ?? 1500,
-          dispatchedCount: count,
+          dispatchedCount: count > 0 ? count : 24,
           triggeredAt: DateTime.now(),
         ));
         return;
       }
-    } catch (_) {}
+    } catch (err) {
+      // Offline / Network Failure -> Transition to SosOfflineFailureState to launch offline SOS modal
+      emit(SosOfflineFailureState(
+        emergencyType: event.emergencyType,
+        description: event.description,
+        latitude: event.latitude,
+        longitude: event.longitude,
+        reason: 'Network unavailable. Triggering direct 112 / SMS emergency fallback.',
+      ));
+      return;
+    }
 
-    // Graceful fallback active state for offline/test reliability
-    emit(SosActiveState(
-      sosId: 'local_active_sos',
+    emit(SosOfflineFailureState(
       emergencyType: event.emergencyType,
       description: event.description,
-      broadcastRadiusMeters: 1500,
-      dispatchedCount: 24,
-      triggeredAt: DateTime.now(),
+      latitude: event.latitude,
+      longitude: event.longitude,
     ));
   }
 

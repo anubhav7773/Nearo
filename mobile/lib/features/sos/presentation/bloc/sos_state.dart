@@ -22,6 +22,22 @@ class SosActiveState extends SosState {
   });
 }
 
+class SosOfflineFailureState extends SosState {
+  final String emergencyType;
+  final String? description;
+  final double latitude;
+  final double longitude;
+  final String reason;
+
+  SosOfflineFailureState({
+    required this.emergencyType,
+    this.description,
+    required this.latitude,
+    required this.longitude,
+    this.reason = 'Network connection unavailable. Offline emergency fallback activated.',
+  });
+}
+
 class SosErrorState extends SosState {
   final String message;
 
