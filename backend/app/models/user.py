@@ -1,7 +1,7 @@
 import enum
 import uuid
 
-from geoalchemy2 import Geometry
+from geoalchemy2 import Geography, Geometry
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
@@ -122,7 +122,7 @@ class UserLocation(Base):
     )
     pincode = Column(String(10), nullable=False)
     last_known_location = Column(
-        Geometry(geometry_type="POINT", srid=4326, spatial_index=True),
+        Geography(geometry_type="POINT", srid=4326, spatial_index=True),
         nullable=False,
     )
     preferred_radius_meters = Column(

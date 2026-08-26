@@ -1,7 +1,7 @@
 import enum
 import uuid
 
-from geoalchemy2 import Geometry
+from geoalchemy2 import Geography, Geometry
 from sqlalchemy import (
     Column,
     DateTime,
@@ -45,15 +45,15 @@ class SOSEvent(Base):
     )  # 'medical', 'security', 'fire', 'scam', 'other'
     description = Column(Text, nullable=True)
     location = Column(
-        Geometry(geometry_type="POINT", srid=4326),
+        Geography(geometry_type="POINT", srid=4326),
         nullable=True,
     )
     initial_location = Column(
-        Geometry(geometry_type="POINT", srid=4326),
+        Geography(geometry_type="POINT", srid=4326),
         nullable=False,
     )
     current_location = Column(
-        Geometry(geometry_type="POINT", srid=4326, spatial_index=True),
+        Geography(geometry_type="POINT", srid=4326, spatial_index=True),
         nullable=False,
     )
     status = Column(

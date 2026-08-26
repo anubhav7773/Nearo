@@ -1,7 +1,7 @@
 import enum
 import uuid
 
-from geoalchemy2 import Geometry
+from geoalchemy2 import Geography, Geometry
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -58,7 +58,7 @@ class LocalAd(Base):
     cta_title = Column(String(50), default="Contact on WhatsApp", nullable=True)
     whatsapp_number = Column(String(15), nullable=True)
     target_center = Column(
-        Geometry(geometry_type="POINT", srid=4326, spatial_index=True),
+        Geography(geometry_type="POINT", srid=4326, spatial_index=True),
         nullable=False,
     )
     target_radius_meters = Column(Integer, default=3000, nullable=False)
