@@ -1,5 +1,6 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import '../../../../core/network/secure_storage.dart';
+import '../../../../core/services/fcm_service.dart';
 import '../../data/auth_repository_impl.dart';
 import '../../domain/auth_repository.dart';
 import 'auth_event.dart';
@@ -31,6 +32,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     }
 
     final profile = await _authRepository.getCurrentUser();
+    // Synchronize FCM token to backend now that user is verified & authenticated
+    FCMNotificationService().syncTokenToBackend();
+
     emit(AuthAuthenticated(
       aliasName: (profile['alias'] ?? profile['alias_name'] ?? 'Resident').toString(),
       email: profile['email']?.toString(),
@@ -51,6 +55,9 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
 
     if (result['success'] == true) {
       final user = result['user'] as Map<String, dynamic>? ?? const {};
+      // Synchronize FCM token to backend now that user is verified & authenticated
+      FCMNotificationService().syncTokenToBackend();
+
       emit(AuthAuthenticated(
         aliasName: (user['alias_name'] ??
                 await SecureStorageService.getAliasName() ??

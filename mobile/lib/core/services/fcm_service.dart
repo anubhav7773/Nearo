@@ -3,6 +3,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
 import '../constants/api_endpoints.dart';
 import '../network/api_client.dart';
+import '../network/secure_storage.dart';
 
 class FCMNotificationService {
   static final FCMNotificationService _instance =
@@ -34,7 +35,7 @@ class FCMNotificationService {
         print('FCM Permission Status: ${settings.authorizationStatus}');
       }
 
-      // 2. Fetch and register device FCM token
+      // 2. Fetch and register device FCM token only if authenticated
       final token = await messaging.getToken();
       if (token != null) {
         await syncTokenToBackend(token);
@@ -60,11 +61,20 @@ class FCMNotificationService {
     }
   }
 
-  Future<void> syncTokenToBackend(String token) async {
+  Future<void> syncTokenToBackend([String? token]) async {
     try {
+      final authToken = await SecureStorageService.getAccessToken();
+      if (authToken == null || authToken.isEmpty) {
+        // Defer syncing to backend until authenticated to prevent 401 Unauthorized
+        return;
+      }
+
+      final fcmToken = token ?? await FirebaseMessaging.instance.getToken();
+      if (fcmToken == null || fcmToken.isEmpty) return;
+
       await _apiClient.dio.post(
         ApiEndpoints.userFcmToken,
-        data: {'fcm_token': token},
+        data: {'fcm_token': fcmToken},
       );
     } catch (_) {}
   }
