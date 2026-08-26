@@ -24,15 +24,24 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("../keystores/release.keystore")
+            storePassword = "nearo123"
+            keyAlias = "nearokey"
+            keyPassword = "nearo123"
+        }
+    }
+
     buildTypes {
         release {
-            // Force release build to use debug signing key for painless app updates & testing
-            signingConfig = signingConfigs.getByName("debug")
+            // Persistent release signing with bundled keystore to permanently prevent package conflicts
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             isShrinkResources = false
         }
         debug {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }

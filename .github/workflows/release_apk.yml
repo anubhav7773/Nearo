@@ -35,13 +35,6 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Ensure Debug Keystore Exists on CI Runner
-        run: |
-          mkdir -p ~/.android
-          if [ ! -f ~/.android/debug.keystore ]; then
-            keytool -genkey -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
-          fi
-
       - name: Install Dependencies
         run: |
           cd mobile
@@ -66,9 +59,9 @@ jobs:
       - name: Upload Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v1.0.1-${{ steps.meta.outputs.TIMESTAMP }}
-          name: "Nearo Android Release v1.0.1 (${{ steps.meta.outputs.TIMESTAMP }})"
-          body: "Automated production build for Nearo v1.0.1."
+          tag_name: v1.0.2-${{ steps.meta.outputs.TIMESTAMP }}
+          name: "Nearo Android Release v1.0.2 (${{ steps.meta.outputs.TIMESTAMP }})"
+          body: "Automated production build for Nearo v1.0.2."
           draft: false
           prerelease: false
           files: mobile/build/app/outputs/flutter-apk/app-release.apk
