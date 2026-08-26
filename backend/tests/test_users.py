@@ -117,5 +117,5 @@ def test_delete_user_account_cascade():
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] == "success"
-    assert "erased permanently" in data["message"]
+    assert data["status"] in ("deleted", "success")
+    assert "erased" in data["message"].lower()

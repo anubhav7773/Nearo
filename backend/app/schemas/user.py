@@ -126,8 +126,8 @@ class UserRadiusUpdateRequest(BaseModel):
 
 
 class UserDeleteResponse(BaseModel):
-    status: str = "success"
-    message: str = "All personal data erased permanently."
+    status: str = "deleted"
+    message: str = "All personal data erased under DPDP compliance."
 
 
 class FCMTokenSyncRequest(BaseModel):

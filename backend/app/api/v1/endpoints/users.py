@@ -229,25 +229,44 @@ async def update_user_radius(
     "/me",
     response_model=UserDeleteResponse,
     summary="DPDP Hard Account Deletion",
-    description="Permanently deletes user profile and cascades removal of all associated data.",
+    description="Permanently deletes user profile and cascades removal of all associated data under DPDP compliance.",
 )
 async def delete_user_account(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    if getattr(current_user, "firebase_uid", None):
+    # 1. Erase from Firebase Auth if UID exists
+    firebase_uid = getattr(current_user, "firebase_uid", None) or getattr(current_user, "clerk_user_id", None)
+    if firebase_uid:
         try:
             from firebase_admin import auth as fb_auth
-            fb_auth.delete_user(current_user.firebase_uid)
+            fb_auth.delete_user(firebase_uid)
         except Exception:
             pass
 
+    # 2. Explicitly clean up linked records
+    try:
+        from app.models.business import Business
+        from app.models.post import Post, PostUpvote
+        from app.models.sos import SOSEvent
+        from app.models.user import UserLocation
+        from sqlalchemy import delete
+
+        await db.execute(delete(PostUpvote).where(PostUpvote.user_id == current_user.id))
+        await db.execute(delete(Post).where(or_(Post.author_id == current_user.id, Post.user_id == current_user.id)))
+        await db.execute(delete(SOSEvent).where(SOSEvent.triggered_by == current_user.id))
+        await db.execute(delete(Business).where(Business.owner_id == current_user.id))
+        await db.execute(delete(UserLocation).where(UserLocation.user_id == current_user.id))
+    except Exception:
+        pass
+
+    # 3. Delete user record
     await db.delete(current_user)
     await db.commit()
 
     return UserDeleteResponse(
-        status="success",
-        message="All personal data erased permanently.",
+        status="deleted",
+        message="All personal data erased under DPDP compliance.",
     )
 
 

@@ -1,4 +1,7 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../../../core/constants/api_endpoints.dart';
 import '../../../../core/constants/colors.dart';
 import '../../../../core/network/api_client.dart';
@@ -126,9 +129,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Account & Erase All Data?'),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: AppColors.sosRed, size: 24),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Permanently Delete Account?',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
         content: const Text(
-          'Are you sure? Under India DPDP privacy regulations, this will permanently delete all your posts, upvotes, verified status, and civic activity. This action is irreversible.',
+          'Under the Digital Personal Data Protection (DPDP) Act, this action will permanently delete all your posts, comments, civic SOS logs, verified resident status, and authentication credentials. This cannot be undone.',
+          style: TextStyle(fontSize: 13, height: 1.4, color: AppColors.textPrimary),
         ),
         actions: [
           TextButton(
@@ -141,14 +156,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
               try {
                 await _apiClient.dio.delete(ApiEndpoints.deleteUserMe);
               } catch (_) {}
+
+              // 1. Wipe secure storage credentials
               await SecureStorageService.clearSession();
+
+              // 2. Wipe local shared preferences cache
+              try {
+                final prefs = await SharedPreferences.getInstance();
+                await prefs.clear();
+              } catch (_) {}
+
+              // 3. Revoke Firebase Auth & Google session
+              try {
+                await GoogleSignIn().signOut();
+              } catch (_) {}
+              try {
+                await FirebaseAuth.instance.signOut();
+              } catch (_) {}
+
+              // 4. Return to LoginScreen
               widget.onLogout();
             },
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.sosRed,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Purge My Data Permanently'),
+            child: const Text('Delete Account & Wipe Data'),
           ),
         ],
       ),
@@ -174,8 +207,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           IconButton(
             icon: const Icon(Icons.logout, color: AppColors.textSecondary),
             onPressed: () {
-              // Delegates to the AuthBloc's SignOutRequested, which also revokes
-              // the cached Google/Firebase session before clearing local storage.
               widget.onLogout();
             },
           ),
@@ -392,17 +423,65 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 24),
 
-                  // 4. DPDP 1-Click Data Erasure Button
-                  Center(
-                    child: TextButton.icon(
-                      onPressed: _confirmDeleteAccount,
-                      icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.sosRed),
-                      label: const Text(
-                        'Delete Account & Erase All Data',
-                        style: TextStyle(color: AppColors.sosRed, fontWeight: FontWeight.w600),
-                      ),
+                  // 4. Dedicated Privacy & Data Management Section (DPDP Right to Erasure)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceCard,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.borderSubtle),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Row(
+                          children: [
+                            Icon(Icons.privacy_tip_outlined, size: 20, color: AppColors.primaryBlue),
+                            SizedBox(width: 8),
+                            Text(
+                              'Privacy & Data Management',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Under India DPDP Act compliance, you retain absolute ownership of your personal data and right to complete digital erasure.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          height: 44,
+                          child: OutlinedButton.icon(
+                            onPressed: _confirmDeleteAccount,
+                            icon: const Icon(Icons.delete_forever, size: 18, color: AppColors.sosRed),
+                            label: const Text(
+                              'Delete Account & Wipe Data',
+                              style: TextStyle(
+                                color: AppColors.sosRed,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(color: AppColors.sosRed, width: 1.2),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
+                  const SizedBox(height: 24),
                 ],
               ),
             ),
