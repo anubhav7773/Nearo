@@ -40,9 +40,9 @@ class SOSEvent(Base):
         nullable=False,
         index=True,
     )
-    emergency_type = Column(
-        String(50), nullable=False
-    )  # 'medical', 'security', 'fire', 'scam'
+    category = Column(
+        String(50), nullable=False, default="security"
+    )  # 'medical', 'security', 'fire', 'scam', 'other'
     description = Column(Text, nullable=True)
     initial_location = Column(
         Geometry(geometry_type="POINT", srid=4326),
@@ -70,6 +70,14 @@ class SOSEvent(Base):
         nullable=False,
     )
     resolved_at = Column(DateTime(timezone=True), nullable=True)
+
+    @property
+    def emergency_type(self) -> str:
+        return self.category or "security"
+
+    @emergency_type.setter
+    def emergency_type(self, value: str):
+        self.category = value
 
     # Relationships
     user = relationship("User", back_populates="sos_events")

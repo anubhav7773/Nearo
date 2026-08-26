@@ -32,12 +32,14 @@ class AlertService:
         """Create an SOS event, query affected residents in 1,500m radius, and broadcast via Redis."""
         point_geom = func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 4326)
 
+        cat_val = emergency_type or "security"
+
         # 1. Create SOSEvent record
         event_id = uuid.uuid4()
         sos_event = SOSEvent(
             id=event_id,
             triggered_by=user_id,
-            emergency_type=emergency_type,
+            category=cat_val,
             description=description,
             initial_location=point_geom,
             current_location=point_geom,
@@ -200,12 +202,13 @@ class AlertService:
             else None
         )
 
+        category_val = getattr(active_event, "category", None) or getattr(active_event, "emergency_type", "security")
         detail = SOSEventDetail(
             id=active_event.id,
             event_id=active_event.id,
             triggered_by=active_event.triggered_by,
-            category=active_event.emergency_type,
-            emergency_type=active_event.emergency_type,
+            category=category_val,
+            emergency_type=category_val,
             description=active_event.description,
             status=active_event.status,
             responders_count=active_event.responders_count,
@@ -308,13 +311,14 @@ class AlertService:
                 if hasattr(sos, "created_at") and isinstance(sos.created_at, datetime)
                 else None
             )
+            sos_cat = getattr(sos, "category", None) or getattr(sos, "emergency_type", "security")
             events.append(
                 SOSEventDetail(
                     id=sos.id,
                     event_id=sos.id,
                     triggered_by=sos.triggered_by,
-                    category=sos.emergency_type,
-                    emergency_type=sos.emergency_type,
+                    category=sos_cat,
+                    emergency_type=sos_cat,
                     description=sos.description,
                     status=sos.status,
                     responders_count=sos.responders_count,
