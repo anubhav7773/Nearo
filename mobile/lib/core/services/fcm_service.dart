@@ -35,18 +35,12 @@ class FCMNotificationService {
         print('FCM Permission Status: ${settings.authorizationStatus}');
       }
 
-      // 2. Fetch and register device FCM token only if authenticated
-      final token = await messaging.getToken();
-      if (token != null) {
-        await syncTokenToBackend(token);
-      }
-
-      // 3. Listen for token refreshes
+      // 2. Setup token refresh listener (syncs if authenticated)
       messaging.onTokenRefresh.listen((newToken) {
         syncTokenToBackend(newToken);
       });
 
-      // 4. Foreground message listener
+      // 3. Foreground message listener
       FirebaseMessaging.onMessage.listen((RemoteMessage message) {
         if (kDebugMode) {
           print('Received foreground notification: ${message.notification?.title}');
@@ -61,21 +55,35 @@ class FCMNotificationService {
     }
   }
 
+  /// Sends the current FCM device token to the backend only when an authentication JWT is present.
   Future<void> syncTokenToBackend([String? token]) async {
     try {
       final authToken = await SecureStorageService.getAccessToken();
-      if (authToken == null || authToken.isEmpty) {
-        // Defer syncing to backend until authenticated to prevent 401 Unauthorized
+      if (authToken == null || authToken.trim().isEmpty) {
+        // User not logged in yet -> Gracefully abort sync until AuthBloc emits authenticated state
+        if (kDebugMode) {
+          print('FCM Sync deferred: No active authentication session.');
+        }
         return;
       }
 
       final fcmToken = token ?? await FirebaseMessaging.instance.getToken();
-      if (fcmToken == null || fcmToken.isEmpty) return;
+      if (fcmToken == null || fcmToken.trim().isEmpty) return;
 
       await _apiClient.dio.post(
         ApiEndpoints.userFcmToken,
         data: {'fcm_token': fcmToken},
       );
-    } catch (_) {}
+      if (kDebugMode) {
+        print('FCM Token registered with backend successfully.');
+      }
+    } catch (e) {
+      if (kDebugMode) {
+        print('FCM Token registration failed: $e');
+      }
+    }
   }
+
+  /// Alias for syncTokenToBackend
+  Future<void> sendFcmTokenToServer([String? token]) => syncTokenToBackend(token);
 }
