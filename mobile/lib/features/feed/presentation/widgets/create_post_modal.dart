@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../../../core/constants/colors.dart';
 import '../bloc/feed_bloc.dart';
 import '../bloc/feed_event.dart';
@@ -34,7 +35,7 @@ class _CreatePostModalState extends State<CreatePostModal> {
     super.dispose();
   }
 
-  void _handleSubmit() {
+  Future<void> _handleSubmit() async {
     final body = _bodyController.text.trim();
     if (body.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -54,6 +55,15 @@ class _CreatePostModalState extends State<CreatePostModal> {
       lng = feedState.userLng;
     }
 
+    try {
+      final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+        timeLimit: const Duration(seconds: 3),
+      );
+      lat = pos.latitude;
+      lng = pos.longitude;
+    } catch (_) {}
+
     // 1. Dispatch CreatePostEvent to network
     feedBloc.add(
       CreatePostEvent(
@@ -71,21 +81,21 @@ class _CreatePostModalState extends State<CreatePostModal> {
     feedBloc.add(FetchFeed(
       lat: lat,
       lng: lng,
-      radiusMeters: feedState is FeedLoaded ? feedState.activeRadiusMeters : 1500,
+      radiusMeters: feedState is FeedLoaded ? feedState.activeRadiusMeters : 5000,
       category: feedState is FeedLoaded ? feedState.activeCategory : 'all',
     ));
 
-    // 3. Close modal bottom sheet
-    Navigator.of(context).pop();
-
-    // 4. Show success snackbar
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Post published to your neighborhood radius.'),
-        backgroundColor: AppColors.verifiedGreen,
-        duration: Duration(seconds: 3),
-      ),
-    );
+    // 3. Close modal bottom sheet & show snackbar
+    if (mounted) {
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Post shared with your neighborhood.'),
+          backgroundColor: AppColors.verifiedGreen,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
   }
 
   @override
