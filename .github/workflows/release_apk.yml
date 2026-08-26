@@ -35,15 +35,14 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Display Build Environment Info
-        run: |
-          flutter --version
-          java -version
-
       - name: Install Mobile Dependencies
         run: |
           cd mobile
           flutter pub get
+
+      - name: Inject google-services.json
+        run: |
+          echo "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 --decode > mobile/android/app/google-services.json
 
       - name: Build Android Release APK
         run: |
@@ -68,7 +67,7 @@ jobs:
             - **Parent Entity:** ASIVERTICALS
             - **Build Timestamp:** ${{ steps.meta.outputs.TIMESTAMP }}
 
-            📲 **Download:** Direct `app-release.apk` is attached below.
+            📲 **Download:** Direct `app-release.apk` attached below.
           draft: false
           prerelease: false
           files: mobile/build/app/outputs/flutter-apk/app-release.apk
