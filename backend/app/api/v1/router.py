@@ -6,6 +6,7 @@ from app.api.v1.endpoints import (
     directory,
     feed,
     location,
+    posts,
     sos,
     subscriptions,
     users,
@@ -15,7 +16,7 @@ api_router = APIRouter()
 
 api_router.include_router(auth.router, prefix="/auth", tags=["Auth"])
 api_router.include_router(users.router, prefix="/users", tags=["Users & Profiles"])
-api_router.include_router(feed.router, prefix="/posts", tags=["Feed & Posts"])
+api_router.include_router(posts.router, prefix="/posts", tags=["Feed & Posts"])
 api_router.include_router(directory.router, prefix="/directory", tags=["Business Directory"])
 api_router.include_router(
     location.router, prefix="/location", tags=["Location & Geofencing"]

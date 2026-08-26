@@ -2,7 +2,6 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../../core/constants/api_endpoints.dart';
 import '../../../../core/network/api_client.dart';
-import '../../../../core/utils/geo_utils.dart';
 import '../../data/models/feed_item_model.dart';
 import 'feed_event.dart';
 import 'feed_state.dart';
@@ -59,20 +58,10 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
       }
     }
 
-    // Apply DPDP 200m–500m coordinate jitter for user privacy compliance
-    final jittered = GeoUtils.applyJitter(
-      latitude: lat,
-      longitude: lng,
-      minMeters: 200.0,
-      maxMeters: 500.0,
-    );
-    final queryLat = jittered['latitude'] ?? lat;
-    final queryLng = jittered['longitude'] ?? lng;
-
     try {
       final queryParams = <String, dynamic>{
-        'lat': queryLat,
-        'lng': queryLng,
+        'lat': lat,
+        'lng': lng,
         'radius_meters': radius,
         'page': 1,
         'limit': 20,
@@ -87,16 +76,24 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
       );
 
       if (response.statusCode == 200 && response.data != null) {
-        final rawList = response.data['data'] as List<dynamic>? ?? [];
+        List<dynamic> rawList = [];
+        if (response.data is List) {
+          rawList = response.data as List<dynamic>;
+        } else if (response.data is Map && response.data['data'] is List) {
+          rawList = response.data['data'] as List<dynamic>;
+        }
+
         List<FeedItem> items = rawList
             .map((e) => FeedItem.fromJson(e as Map<String, dynamic>))
             .toList();
 
-        // Client-side fallback filter
-        if (category != 'all') {
+        // Client-side category matching if needed
+        if (category != 'all' && category.isNotEmpty) {
+          final normalizedCat = category.toLowerCase().replaceAll(' ', '_');
           items = items.where((item) {
             if (item is CommunityPostItem) {
-              return item.category.toLowerCase() == category.toLowerCase();
+              final postCat = item.category.toLowerCase().replaceAll(' ', '_');
+              return postCat == normalizedCat || postCat.contains(normalizedCat);
             }
             return true; // Keep ads in feed
           }).toList();
@@ -211,21 +208,14 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
 
   Future<void> _onCreatePost(CreatePostEvent event, Emitter<FeedState> emit) async {
     try {
-      final jittered = GeoUtils.applyJitter(
-        latitude: event.latitude,
-        longitude: event.longitude,
-        minMeters: 200.0,
-        maxMeters: 500.0,
-      );
-
       final response = await _apiClient.dio.post(
         ApiEndpoints.posts,
         data: {
           'title': event.title,
           'content': event.content,
           'category': event.category,
-          'latitude': jittered['latitude'] ?? event.latitude,
-          'longitude': jittered['longitude'] ?? event.longitude,
+          'latitude': event.latitude,
+          'longitude': event.longitude,
         },
       );
 
@@ -237,4 +227,3 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
     }
   }
 }
-

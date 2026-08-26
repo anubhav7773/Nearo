@@ -112,8 +112,9 @@ class GeoService:
             )
         ]
 
-        if category and category.lower() not in ("all", "all updates", ""):
-            cat_val = category.lower().replace(" ", "_")
+        if category and category.strip().lower() not in ("all", "all updates", ""):
+            raw_cat = category.strip().lower()
+            cat_val = raw_cat.replace(" ", "_")
             # Map friendly tab names
             if "civic" in cat_val:
                 cat_val = "civic_issue"
@@ -121,16 +122,27 @@ class GeoService:
                 cat_val = "alert"
             elif "help" in cat_val:
                 cat_val = "help_needed"
-            elif "trade" in cat_val:
+            elif "trade" in cat_val or "buy" in cat_val or "sell" in cat_val:
                 cat_val = "trade"
             elif "general" in cat_val:
                 cat_val = "general"
 
             try:
                 cat_enum = PostCategory(cat_val)
-                where_conditions.append(Post.category == cat_enum)
+                where_conditions.append(
+                    or_(
+                        Post.category == cat_enum,
+                        func.lower(func.cast(Post.category, text("text"))) == cat_val,
+                        func.lower(func.cast(Post.category, text("text"))) == raw_cat,
+                    )
+                )
             except ValueError:
-                pass
+                where_conditions.append(
+                    or_(
+                        func.lower(func.cast(Post.category, text("text"))) == cat_val,
+                        func.lower(func.cast(Post.category, text("text"))) == raw_cat,
+                    )
+                )
 
         query = (
             select(

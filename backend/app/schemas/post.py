@@ -37,6 +37,11 @@ class PostCreateResponse(BaseModel):
     id: uuid.UUID
     status: str = "published"
     created_at: datetime | None = None
+    title: str | None = None
+    content: str | None = None
+    category: str | None = None
+    author_alias: str | None = "Citizen"
+    distance_meters: int | None = 0
 
 
 class PostResponse(BaseModel):
