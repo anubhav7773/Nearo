@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.asiverticals.nearo"
+    namespace = "com.example.nearo"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -16,32 +16,23 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.asiverticals.nearo"
+        applicationId = "com.example.nearo"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        versionCode = 2
+        versionName = "1.0.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-    }
-
-    signingConfigs {
-        create("release") {
-            storeFile = file("../keystores/release.keystore")
-            storePassword = "nearo123"
-            keyAlias = "nearokey"
-            keyPassword = "nearo123"
-        }
     }
 
     buildTypes {
         release {
-            // Persistent release signing with bundled keystore to permanently prevent package conflicts
-            signingConfig = signingConfigs.getByName("release")
+            // Standard debug keystore signing to prevent keystore missing errors on CI and allow smooth update installs
+            signingConfig = signingConfigs.getByName("debug")
             isMinifyEnabled = false
             isShrinkResources = false
         }
         debug {
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 }
