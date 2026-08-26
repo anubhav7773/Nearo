@@ -35,38 +35,32 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Install Mobile Dependencies
+      - name: Install Dependencies
         run: |
           cd mobile
           flutter pub get
 
-      - name: Inject google-services.json
+      - name: Inject Firebase Config
         run: |
           echo "${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}" | base64 --decode > mobile/android/app/google-services.json
 
-      - name: Build Android Release APK
+      - name: Build APK
         run: |
           cd mobile
           flutter build apk --release
 
-      - name: Generate Build Metadata
+      - name: Set Release Metadata
         id: meta
         run: |
           echo "SHA_SHORT=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
           echo "TIMESTAMP=$(date +'%Y.%m.%d-%H%M')" >> $GITHUB_OUTPUT
 
-      - name: Publish GitHub Release & Attach APK
+      - name: Upload Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: build-${{ steps.meta.outputs.TIMESTAMP }}-${{ steps.meta.outputs.SHA_SHORT }}
+          tag_name: v1.0.0-${{ steps.meta.outputs.TIMESTAMP }}
           name: "Nearo Android Release (${{ steps.meta.outputs.TIMESTAMP }})"
-          body: |
-            ### 🚀 Nearo Automated Android Release
-            - **Commit SHA:** `${{ github.sha }}`
-            - **Branch:** `${{ github.ref_name }}`
-            - **Build Timestamp:** ${{ steps.meta.outputs.TIMESTAMP }}
-
-            📲 **Download:** Direct `app-release.apk` attached below.
+          body: "Automated production build for Nearo."
           draft: false
           prerelease: false
           files: mobile/build/app/outputs/flutter-apk/app-release.apk
