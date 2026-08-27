@@ -110,7 +110,7 @@ void main() {
       expect(model.content, equals('Municipal water tank arrived at Gate 1.'));
     });
 
-    testWidgets('CommentsSheet renders header and comment input',
+    testWidgets('CommentsSheet renders header, comment input, and empty state',
         (WidgetTester tester) async {
       await tester.pumpWidget(
         const MaterialApp(
@@ -118,16 +118,49 @@ void main() {
             body: CommentsSheet(
               postId: 'test-post-1',
               postTitle: 'Water Supply Update',
+              initialComments: [],
             ),
           ),
         ),
       );
 
-      await tester.pump(const Duration(milliseconds: 500));
+      await tester.pump();
 
       expect(find.text('Comments'), findsOneWidget);
       expect(find.text('Water Supply Update'), findsOneWidget);
       expect(find.byType(TextField), findsOneWidget);
+      expect(find.text('No comments yet'), findsOneWidget);
+      expect(find.text('Start the conversation with your neighbors!'), findsOneWidget);
+    });
+
+    testWidgets('CommentsSheet renders list of comments when present',
+        (WidgetTester tester) async {
+      final sampleComment = CommentModel(
+        id: 'c1',
+        postId: 'p1',
+        authorId: 'u1',
+        authorAlias: 'Sharma_Ji',
+        content: 'Tanker is here now.',
+        createdAt: DateTime.now(),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: CommentsSheet(
+              postId: 'test-post-1',
+              postTitle: 'Water Supply Update',
+              initialComments: [sampleComment],
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      expect(find.text('Comments'), findsOneWidget);
+      expect(find.text('Sharma_Ji'), findsOneWidget);
+      expect(find.text('Tanker is here now.'), findsOneWidget);
     });
   });
 }
