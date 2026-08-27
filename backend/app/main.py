@@ -7,13 +7,15 @@ from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.api.v1.router import api_router
 from app.core.config import settings
+from app.core.database import init_spatial_db
 from app.core.firebase import init_firebase
 from app.core.redis import close_redis_pool, init_redis_pool
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Lifespan Startup: initialize Firebase Admin SDK and Redis connection pool
+    # Lifespan Startup: initialize PostGIS schema compatibility, Firebase Admin SDK, and Redis connection pool
+    await init_spatial_db()
     init_firebase()
     await init_redis_pool()
     yield

@@ -44,6 +44,48 @@ class Base(DeclarativeBase):
     """Base declarative class for all SQLAlchemy ORM models."""
 
 
+from sqlalchemy import text
+
+
+async def init_spatial_db():
+    """Ensure PostGIS extension exists, create st_asewkb(geography) compatibility shim,
+    and migrate legacy geography columns to geometry(Point, 4326).
+    """
+    async with engine.begin() as conn:
+        try:
+            # 1. Enable PostGIS
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS postgis;"))
+
+            # 2. Compatibility shim: Define ST_AsEWKB for geography to eliminate asyncpg st_asewkb(geography) does not exist error permanently
+            shim_sql = """
+                CREATE OR REPLACE FUNCTION public.st_asewkb(geog geography)
+                RETURNS bytea AS $$
+                BEGIN
+                    RETURN ST_AsEWKB(geog::geometry);
+                END;
+                $$ LANGUAGE plpgsql IMMUTABLE STRICT;
+            """
+            await conn.execute(text(shim_sql))
+
+            # 3. Alter legacy geography columns to geometry(Point, 4326) across tables if they exist
+            alter_sqls = [
+                "ALTER TABLE public.posts ALTER COLUMN location TYPE geometry(Point, 4326) USING location::geometry;",
+                "ALTER TABLE public.sos_events ALTER COLUMN location TYPE geometry(Point, 4326) USING location::geometry;",
+                "ALTER TABLE public.sos_events ALTER COLUMN initial_location TYPE geometry(Point, 4326) USING initial_location::geometry;",
+                "ALTER TABLE public.sos_events ALTER COLUMN current_location TYPE geometry(Point, 4326) USING current_location::geometry;",
+                "ALTER TABLE public.user_locations ALTER COLUMN last_known_location TYPE geometry(Point, 4326) USING last_known_location::geometry;",
+                "ALTER TABLE public.businesses ALTER COLUMN location TYPE geometry(Point, 4326) USING location::geometry;",
+                "ALTER TABLE public.local_ads ALTER COLUMN target_center TYPE geometry(Point, 4326) USING target_center::geometry;",
+            ]
+            for alter_sql in alter_sqls:
+                try:
+                    await conn.execute(text(alter_sql))
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Dependency provider yielding an asynchronous SQLAlchemy database session."""
     async with AsyncSessionLocal() as session:
