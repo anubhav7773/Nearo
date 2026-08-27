@@ -2,6 +2,20 @@ abstract class SosEvent {}
 
 class CheckActiveSos extends SosEvent {}
 
+class TriggerSosRequested extends SosEvent {
+  final String category;
+  final String? description;
+  final double? latitude;
+  final double? longitude;
+
+  TriggerSosRequested({
+    required this.category,
+    this.description,
+    this.latitude,
+    this.longitude,
+  });
+}
+
 class TriggerSosBroadcast extends SosEvent {
   final String emergencyType;
   final String? description;
@@ -16,15 +30,16 @@ class TriggerSosBroadcast extends SosEvent {
   });
 }
 
+class FetchActiveSosDetails extends SosEvent {
+  final String? sosId;
+
+  FetchActiveSosDetails({this.sosId});
+}
+
 class CancelActiveSos extends SosEvent {
   final String? eventId;
 
   CancelActiveSos({this.eventId});
 }
 
-class FetchActiveEmergencyRadius extends SosEvent {
-  final double lat;
-  final double lng;
-
-  FetchActiveEmergencyRadius({required this.lat, required this.lng});
-}
+class ResetSosState extends SosEvent {}

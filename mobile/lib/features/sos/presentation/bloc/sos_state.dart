@@ -1,41 +1,90 @@
+import '../../data/models/sos_event_model.dart';
+
 abstract class SosState {}
 
 class SosIdle extends SosState {}
 
-class SosTriggering extends SosState {}
+class SosDispatchingState extends SosState {}
 
-class SosActiveState extends SosState {
-  final String sosId;
-  final String emergencyType;
-  final String? description;
-  final int broadcastRadiusMeters;
-  final int dispatchedCount;
-  final DateTime triggeredAt;
+// Backwards compatibility alias
+class SosTriggering extends SosDispatchingState {}
 
-  SosActiveState({
-    required this.sosId,
-    required this.emergencyType,
-    this.description,
-    this.broadcastRadiusMeters = 1500,
-    this.dispatchedCount = 0,
-    required this.triggeredAt,
-  });
+class SosDispatchedSuccess extends SosState {
+  final SosEventModel sosEvent;
+
+  SosDispatchedSuccess({required this.sosEvent});
+
+  String get sosId => sosEvent.id;
+  String get emergencyType => sosEvent.category;
+  String? get description => sosEvent.description;
+  int get broadcastRadiusMeters => sosEvent.broadcastRadiusMeters;
+  int get dispatchedCount => sosEvent.dispatchedCount;
+  DateTime get triggeredAt => sosEvent.createdAt;
 }
 
-class SosOfflineFailureState extends SosState {
-  final String emergencyType;
+// Backwards compatibility subclass
+class SosActiveState extends SosDispatchedSuccess {
+  SosActiveState({
+    required super.sosEvent,
+  });
+
+  factory SosActiveState.legacy({
+    required String sosId,
+    required String emergencyType,
+    String? description,
+    int broadcastRadiusMeters = 1500,
+    int dispatchedCount = 0,
+    required DateTime triggeredAt,
+    double latitude = 26.7922,
+    double longitude = 82.1998,
+  }) {
+    return SosActiveState(
+      sosEvent: SosEventModel(
+        id: sosId,
+        category: emergencyType,
+        status: 'active',
+        latitude: latitude,
+        longitude: longitude,
+        description: description,
+        broadcastRadiusMeters: broadcastRadiusMeters,
+        dispatchedCount: dispatchedCount,
+        createdAt: triggeredAt,
+      ),
+    );
+  }
+}
+
+class SosDispatchFailure extends SosState {
+  final String errorMessage;
+  final String category;
   final String? description;
   final double latitude;
   final double longitude;
+
+  SosDispatchFailure({
+    required this.errorMessage,
+    this.category = 'security',
+    this.description,
+    this.latitude = 26.7922,
+    this.longitude = 82.1998,
+  });
+}
+
+class SosOfflineFailureState extends SosDispatchFailure {
   final String reason;
 
   SosOfflineFailureState({
-    required this.emergencyType,
-    this.description,
-    required this.latitude,
-    required this.longitude,
+    required String emergencyType,
+    super.description,
+    required super.latitude,
+    required super.longitude,
     this.reason = 'Network connection unavailable. Offline emergency fallback activated.',
-  });
+  }) : super(
+          errorMessage: reason,
+          category: emergencyType,
+        );
+
+  String get emergencyType => category;
 }
 
 class SosErrorState extends SosState {
@@ -43,3 +92,5 @@ class SosErrorState extends SosState {
 
   SosErrorState(this.message);
 }
+
+class SosCancelledSuccess extends SosState {}
