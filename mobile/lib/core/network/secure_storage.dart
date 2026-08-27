@@ -119,6 +119,7 @@ class SecureStorageService {
 
   // Resident Mobile Number & Emergency Contact
   static const String _keyEmergencyContactPhone = 'user_emergency_contact_phone';
+  static const String _keyEmergencyContactName = 'user_emergency_contact_name';
 
   static Future<String?> getUserPhone() async {
     final phone = await _storage.read(key: _keyUserPhone);
@@ -140,6 +141,14 @@ class SecureStorageService {
   static Future<void> saveEmergencyContactPhone(String phone) async {
     await _storage.write(key: _keyEmergencyContactPhone, value: phone.trim());
     await saveUserPhone(phone.trim());
+  }
+
+  static Future<String?> getEmergencyContactName() async {
+    return await _storage.read(key: _keyEmergencyContactName);
+  }
+
+  static Future<void> saveEmergencyContactName(String name) async {
+    await _storage.write(key: _keyEmergencyContactName, value: name.trim());
   }
 
   static Future<bool> hasUserPhone() async {

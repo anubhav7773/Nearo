@@ -155,24 +155,16 @@ class _SosScreenState extends State<SosScreen> with SingleTickerProviderStateMix
   }
 
   Future<void> _triggerSos() async {
-    final hasPhone = await SecureStorageService.hasUserPhone();
-    if (!hasPhone) {
+    final hasContact = await SecureStorageService.hasEmergencyContact();
+    if (!hasContact) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please register your mobile number before broadcasting SOS alerts.'),
+          content: Text('Please configure your emergency contact number before triggering SOS.'),
           backgroundColor: AppColors.sosRed,
         ),
       );
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => PhoneVerificationScreen(
-            onVerificationComplete: () {
-              Navigator.of(context).pop();
-            },
-          ),
-        ),
-      );
+      Navigator.of(context).pushNamed('/emergency-number-setup');
       return;
     }
 

@@ -42,15 +42,7 @@ class OfflineSosModal extends StatelessWidget {
     if (phone == null || phone.trim().isEmpty) {
       if (!context.mounted) return;
       Navigator.pop(context);
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => PhoneVerificationScreen(
-            onVerificationComplete: () {
-              Navigator.of(context).pop();
-            },
-          ),
-        ),
-      );
+      Navigator.of(context).pushNamed('/emergency-number-setup');
       return;
     }
     if (!context.mounted) return;

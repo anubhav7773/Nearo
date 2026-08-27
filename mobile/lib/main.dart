@@ -9,6 +9,7 @@ import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/auth/presentation/bloc/auth_event.dart';
 import 'features/auth/presentation/bloc/auth_state.dart';
+import 'features/auth/presentation/screens/emergency_setup_screen.dart';
 import 'features/auth/presentation/screens/login_screen.dart';
 import 'features/auth/presentation/screens/phone_verification_screen.dart';
 import 'features/feed/presentation/bloc/feed_bloc.dart';
@@ -114,6 +115,13 @@ class _NearoAppState extends State<NearoApp> {
         title: 'Nearo',
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
+        routes: {
+          '/emergency-number-setup': (context) => const EmergencySetupScreen(),
+          '/emergency-setup': (context) => const EmergencySetupScreen(),
+          '/phone-verification': (context) => PhoneVerificationScreen(
+                onVerificationComplete: () => Navigator.of(context).pop(),
+              ),
+        },
         home: BlocListener<AuthBloc, AuthState>(
           listener: (context, state) async {
             if (state is AuthAuthenticated) {
