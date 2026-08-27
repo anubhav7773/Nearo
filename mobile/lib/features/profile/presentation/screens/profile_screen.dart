@@ -23,8 +23,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   String _aliasName = 'Resident_User';
   String _userTier = 'free';
-  String? _emergencyPhone;
-  String? _emergencyName;
+  String? _userPhone;
   double _radiusMeters = 1500;
   bool _isUpgrading = false;
   bool _isLoading = true;
@@ -40,15 +39,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final alias = await SecureStorageService.getAliasName();
     final tier = await SecureStorageService.getUserTier();
     final radiusKm = await SecureStorageService.getRadiusKm();
-    final phone = await SecureStorageService.getEmergencyContactPhone();
-    final name = await SecureStorageService.getEmergencyContactName();
+    final phone = await SecureStorageService.getUserPhone();
 
     if (mounted) {
       setState(() {
         if (alias != null) _aliasName = alias;
         if (tier != null) _userTier = tier;
-        _emergencyPhone = phone;
-        _emergencyName = name;
+        _userPhone = phone;
         _radiusMeters = radiusKm * 1000.0;
         _isLoading = false;
       });
@@ -61,21 +58,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final liveAlias = liveData['alias'] ?? liveData['alias_name'];
         final liveTier = liveData['tier'];
         final liveRadius = liveData['radius_km'];
-        final liveEmergencyPhone = liveData['emergency_contact_phone'];
-        final liveEmergencyName = liveData['emergency_contact_name'];
+        final livePhone = liveData['phone_number'] ?? liveData['phone'];
 
         setState(() {
           if (liveAlias != null) _aliasName = liveAlias.toString();
           if (liveTier != null) _userTier = liveTier.toString();
-          if (liveEmergencyPhone != null) {
-            _emergencyPhone = liveEmergencyPhone.toString();
-            SecureStorageService.saveEmergencyContact(
-              phone: _emergencyPhone!,
-              name: liveEmergencyName?.toString() ?? 'Guardian',
-            );
-          }
-          if (liveEmergencyName != null) {
-            _emergencyName = liveEmergencyName.toString();
+          if (livePhone != null && livePhone.toString().isNotEmpty) {
+            _userPhone = livePhone.toString();
+            SecureStorageService.saveUserPhone(_userPhone!);
           }
           if (liveRadius is num) {
             _radiusMeters = liveRadius.toDouble() * 1000.0;
@@ -84,6 +74,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
         });
       }
     } catch (_) {}
+  }
+
+  String _getMaskedPhone(String? phone) {
+    if (phone == null || phone.isEmpty) {
+      return 'Not registered';
+    }
+    final clean = phone.trim();
+    if (clean.length >= 10) {
+      final last4 = clean.substring(clean.length - 4);
+      final prefix = clean.startsWith('+91') ? '+91 ' : '';
+      return '$prefix******$last4';
+    }
+    return clean;
   }
 
   Future<void> _upgradeToPro() async {
@@ -142,101 +145,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         data: {'radius_km': radiusKm},
       );
     } catch (_) {}
-  }
-
-  void _editEmergencyGuardian() {
-    final nameController = TextEditingController(text: _emergencyName ?? 'Guardian');
-    final phoneController = TextEditingController(
-      text: _emergencyPhone != null
-          ? _emergencyPhone!.replaceFirst('+91', '').trim()
-          : '',
-    );
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.shield_outlined, color: AppColors.sosRed, size: 24),
-            SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                'Emergency Guardian',
-                style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-              ),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              'Your GPS coordinates will be sent directly to this number during offline 1-tap SOS.',
-              style: TextStyle(fontSize: 13, color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: nameController,
-              decoration: InputDecoration(
-                labelText: 'Relation / Name',
-                hintText: 'e.g. Papa, Maa, Spouse',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                isDense: true,
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: phoneController,
-              keyboardType: TextInputType.phone,
-              decoration: InputDecoration(
-                labelText: 'Mobile Number',
-                prefixText: '+91 ',
-                hintText: '10-digit number',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
-                isDense: true,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final raw = phoneController.text.trim().replaceAll(RegExp(r'\D'), '');
-              if (raw.length >= 10) {
-                final formatted = raw.length == 10 ? '+91$raw' : '+$raw';
-                final name = nameController.text.trim().isEmpty ? 'Guardian' : nameController.text.trim();
-                await SecureStorageService.saveEmergencyContact(phone: formatted, name: name);
-                try {
-                  await _apiClient.dio.patch(
-                    '/api/v1/users/me',
-                    data: {
-                      'emergency_contact_phone': formatted,
-                      'emergency_contact_name': name,
-                    },
-                  );
-                } catch (_) {}
-
-                setState(() {
-                  _emergencyPhone = formatted;
-                  _emergencyName = name;
-                });
-                if (ctx.mounted) Navigator.pop(ctx);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.sosRed,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Save Guardian'),
-          ),
-        ],
-      ),
-    );
   }
 
   void _confirmDeleteAccount() {
@@ -402,7 +310,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                   const SizedBox(height: 20),
 
-                  // 2. Emergency Guardian Contact Card
+                  // 2. Verified Mobile Identity Card (Private & Encrypted)
                   Container(
                     padding: const EdgeInsets.all(18),
                     decoration: BoxDecoration(
@@ -414,43 +322,63 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Row(
-                              children: [
-                                Icon(Icons.shield_outlined, color: AppColors.sosRed, size: 20),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Emergency Guardian',
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700,
-                                    color: AppColors.textPrimary,
-                                  ),
-                                ),
-                              ],
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: AppColors.verifiedGreen.withValues(alpha: 0.1),
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.verified_user_rounded,
+                                color: AppColors.verifiedGreen,
+                                size: 18,
+                              ),
                             ),
-                            TextButton.icon(
-                              onPressed: _editEmergencyGuardian,
-                              icon: const Icon(Icons.edit_outlined, size: 16, color: AppColors.primaryBlue),
-                              label: const Text('Edit', style: TextStyle(fontSize: 13, color: AppColors.primaryBlue)),
-                              style: TextButton.styleFrom(
-                                padding: EdgeInsets.zero,
-                                minimumSize: const Size(50, 30),
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                            const SizedBox(width: 10),
+                            const Text(
+                              'Verified Mobile Number',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            const Spacer(),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: AppColors.verifiedGreen.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text(
+                                'Encrypted & Private',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.verifiedGreen,
+                                ),
                               ),
                             ),
                           ],
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 12),
                         Text(
-                          _emergencyPhone != null && _emergencyPhone!.isNotEmpty
-                              ? 'Saved Contact: ${_emergencyName ?? 'Guardian'} (${_emergencyPhone!})'
-                              : 'No guardian contact set. Tap Edit to configure 1-tap SOS SMS recipient.',
+                          _getMaskedPhone(_userPhone),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.8,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'Your phone number is encrypted under India DPDP Act compliance. It is never shared with other neighbors on the public feed or civic discussions.',
                           style: TextStyle(
-                            fontSize: 13,
-                            color: _emergencyPhone != null ? AppColors.textPrimary : AppColors.sosRed,
-                            fontWeight: FontWeight.w500,
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                            height: 1.35,
                           ),
                         ),
                       ],

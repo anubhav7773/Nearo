@@ -106,8 +106,8 @@ def test_patch_user_radius_out_of_bounds():
     assert response_small.status_code == 422
 
 
-def test_patch_user_profile_emergency_contact():
-    """Test updating emergency contact phone and guardian name via PATCH /me."""
+def test_patch_user_profile_phone_number():
+    """Test updating verified resident phone number via PATCH /me."""
     user_id = str(uuid.uuid4())
     token = create_access_token(subject=user_id)
 
@@ -115,12 +115,10 @@ def test_patch_user_profile_emergency_contact():
         "/api/v1/users/me",
         headers={"Authorization": f"Bearer {token}"},
         json={
-            "emergency_contact_phone": "+919876543210",
-            "emergency_contact_name": "Papa",
+            "phone_number": "+919876543210",
         },
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["emergency_contact_phone"] == "+919876543210"
-    assert data["emergency_contact_name"] == "Papa"
+    assert data["phone_number"] == "+919876543210"
 

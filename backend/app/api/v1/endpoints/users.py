@@ -23,7 +23,7 @@ router = APIRouter()
 @router.post(
     "/sync",
     response_model=UserProfileResponse,
-    summary="Sync Clerk Resident Profile to Supabase",
+    summary="Sync Resident Profile to Supabase",
     description="Upserts user profile metadata into Supabase with automatic anonymous handle generation.",
 )
 async def sync_user_profile(
@@ -37,12 +37,15 @@ async def sync_user_profile(
     if not user:
         clerk_id = payload.clerk_user_id
         email = payload.email.lower().strip() if payload.email else None
+        phone = (payload.phone_number or payload.phone).strip() if (payload.phone_number or payload.phone) else None
 
         lookup_conditions = []
         if clerk_id:
             lookup_conditions.append(User.clerk_user_id == clerk_id)
         if email:
             lookup_conditions.append(User.email == email)
+        if phone:
+            lookup_conditions.append(User.phone_number == phone)
 
         if lookup_conditions:
             stmt = select(User).where(or_(*lookup_conditions))
@@ -56,10 +59,9 @@ async def sync_user_profile(
                 id=uuid.uuid4(),
                 clerk_user_id=clerk_id,
                 email=email,
+                phone_number=phone,
                 alias_name=alias,
                 avatar_url=payload.avatar_url,
-                emergency_contact_phone=payload.emergency_contact_phone,
-                emergency_contact_name=payload.emergency_contact_name,
                 role=UserRole.RESIDENT,
                 tier=SubscriptionTier.FREE,
                 is_verified=True,
@@ -96,12 +98,9 @@ async def sync_user_profile(
         user.clerk_user_id = payload.clerk_user_id
         updated = True
 
-    if payload.emergency_contact_phone and payload.emergency_contact_phone != user.emergency_contact_phone:
-        user.emergency_contact_phone = payload.emergency_contact_phone.strip()
-        updated = True
-
-    if payload.emergency_contact_name and payload.emergency_contact_name != user.emergency_contact_name:
-        user.emergency_contact_name = payload.emergency_contact_name.strip()
+    phone_val = payload.phone_number or payload.phone
+    if phone_val and phone_val.strip() != (user.phone_number or ""):
+        user.phone_number = phone_val.strip()
         updated = True
 
     if updated:
@@ -130,12 +129,11 @@ async def sync_user_profile(
         clerk_user_id=user.clerk_user_id,
         alias=user.alias_name,
         email=user.email,
+        phone_number=user.phone_number,
         avatar_url=user.avatar_url,
         radius_km=radius_km,
         tier=user.tier.value if hasattr(user.tier, "value") else str(user.tier),
         is_verified=user.is_verified,
-        emergency_contact_phone=user.emergency_contact_phone,
-        emergency_contact_name=user.emergency_contact_name,
         created_at=created_at_val,
     )
 
@@ -171,6 +169,7 @@ async def get_user_profile_me(
         clerk_user_id=current_user.clerk_user_id,
         alias=current_user.alias_name,
         email=current_user.email,
+        phone_number=current_user.phone_number,
         avatar_url=current_user.avatar_url,
         radius_km=radius_km,
         tier=(
@@ -179,8 +178,6 @@ async def get_user_profile_me(
             else str(current_user.tier)
         ),
         is_verified=current_user.is_verified,
-        emergency_contact_phone=current_user.emergency_contact_phone,
-        emergency_contact_name=current_user.emergency_contact_name,
         created_at=created_at_val,
     )
 
@@ -189,7 +186,7 @@ async def get_user_profile_me(
     "/me",
     response_model=UserProfileResponse,
     summary="Update Current Resident Profile",
-    description="Updates resident profile metadata including emergency guardian contact.",
+    description="Updates resident profile metadata including verified mobile number.",
 )
 async def update_user_profile_me(
     payload: UserProfileUpdateRequest,
@@ -200,10 +197,10 @@ async def update_user_profile_me(
         current_user.alias_name = payload.alias_name.strip()
     if payload.avatar_url is not None:
         current_user.avatar_url = payload.avatar_url
-    if payload.emergency_contact_phone is not None:
-        current_user.emergency_contact_phone = payload.emergency_contact_phone.strip()
-    if payload.emergency_contact_name is not None:
-        current_user.emergency_contact_name = payload.emergency_contact_name.strip()
+
+    phone_val = payload.phone_number or payload.phone
+    if phone_val is not None:
+        current_user.phone_number = phone_val.strip()
 
     await db.commit()
     await db.refresh(current_user)
@@ -229,6 +226,7 @@ async def update_user_profile_me(
         clerk_user_id=current_user.clerk_user_id,
         alias=current_user.alias_name,
         email=current_user.email,
+        phone_number=current_user.phone_number,
         avatar_url=current_user.avatar_url,
         radius_km=radius_km,
         tier=(
@@ -237,8 +235,6 @@ async def update_user_profile_me(
             else str(current_user.tier)
         ),
         is_verified=current_user.is_verified,
-        emergency_contact_phone=current_user.emergency_contact_phone,
-        emergency_contact_name=current_user.emergency_contact_name,
         created_at=created_at_val,
     )
 
@@ -286,6 +282,7 @@ async def update_user_radius(
         clerk_user_id=current_user.clerk_user_id,
         alias=current_user.alias_name,
         email=current_user.email,
+        phone_number=current_user.phone_number,
         avatar_url=current_user.avatar_url,
         radius_km=payload.radius_km,
         tier=(
@@ -294,8 +291,6 @@ async def update_user_radius(
             else str(current_user.tier)
         ),
         is_verified=current_user.is_verified,
-        emergency_contact_phone=current_user.emergency_contact_phone,
-        emergency_contact_name=current_user.emergency_contact_name,
         created_at=created_at_val,
     )
 

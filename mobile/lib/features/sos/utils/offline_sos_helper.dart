@@ -1,6 +1,5 @@
 import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../../../../core/network/secure_storage.dart';
 
 class OfflineSosHelper {
   static Future<Position?> getBestAvailableLocation() async {
@@ -36,54 +35,31 @@ class OfflineSosHelper {
     String? category,
     double? latitude,
     double? longitude,
-    String? contactName,
   }) {
     String locationText = 'Location unavailable (GPS timeout)';
     if (latitude != null && longitude != null) {
       locationText = 'https://maps.google.com/?q=$latitude,$longitude';
     }
 
-    final recipientGreeting = (contactName != null && contactName.trim().isNotEmpty)
-        ? 'Dear $contactName,\n'
-        : '';
     final alertCategory = category ?? 'High Priority Alert';
 
     return 'EMERGENCY ALERT!\n'
-        '$recipientGreeting'
         'I triggered an urgent SOS ($alertCategory).\n'
         'My current location:\n$locationText\n\n'
         'Sent automatically via Nearo Offline Emergency.';
   }
 
-  static Future<Map<String, String?>> getSavedEmergencyContact() async {
-    final phone = await SecureStorageService.getEmergencyContactPhone();
-    final name = await SecureStorageService.getEmergencyContactName();
-    return {
-      'phone': phone,
-      'name': name,
-    };
-  }
-
-  static Future<bool> hasSavedEmergencyContact() async {
-    return await SecureStorageService.hasEmergencyContact();
-  }
-
-  /// Triggers direct offline emergency SMS to saved guardian phone number
-  static Future<bool> triggerDirectOfflineSms({
+  /// Triggers direct offline emergency SMS with GPS coordinates
+  static Future<bool> triggerOfflineSms({
     String? category,
     double? latitude,
     double? longitude,
     String? overridePhone,
-    String? overrideName,
   }) async {
-    // 1. Fetch saved guardian contact or use overrides
-    final savedPhone = overridePhone ?? await SecureStorageService.getEmergencyContactPhone();
-    final savedName = overrideName ?? await SecureStorageService.getEmergencyContactName();
-
     double? lat = latitude;
     double? lng = longitude;
 
-    // 2. Fetch high accuracy current GPS coordinates if not passed
+    // Fetch high accuracy current GPS coordinates if not passed
     if (lat == null || lng == null) {
       final position = await getBestAvailableLocation();
       if (position != null) {
@@ -92,16 +68,14 @@ class OfflineSosHelper {
       }
     }
 
-    // 3. Format SMS message body with Google Maps link
+    // Format SMS message body with Google Maps link
     final messageBody = buildSmsBody(
       category: category,
       latitude: lat,
       longitude: lng,
-      contactName: savedName,
     );
 
-    // 4. Construct direct-to-number SMS URI
-    final cleanPhone = (savedPhone ?? '').trim();
+    final cleanPhone = (overridePhone ?? '').trim();
     final Uri smsUri = Uri(
       scheme: 'sms',
       path: cleanPhone.isNotEmpty ? cleanPhone : null,
@@ -127,18 +101,19 @@ class OfflineSosHelper {
     return false;
   }
 
-  /// Legacy alias maintained for existing call-sites
-  static Future<bool> triggerOfflineSms({
+  /// Legacy alias
+  static Future<bool> triggerDirectOfflineSms({
     String? category,
     double? latitude,
     double? longitude,
-    String? phoneNumber,
+    String? overridePhone,
+    String? overrideName,
   }) async {
-    return await triggerDirectOfflineSms(
+    return await triggerOfflineSms(
       category: category,
       latitude: latitude,
       longitude: longitude,
-      overridePhone: phoneNumber,
+      overridePhone: overridePhone,
     );
   }
 

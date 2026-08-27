@@ -94,16 +94,14 @@ void main() {
   });
 
   group('OfflineSosHelper Tests', () {
-    test('buildSmsBody formats category, guardian greeting and Google Maps link correctly', () {
+    test('buildSmsBody formats category and Google Maps link correctly', () {
       final body = OfflineSosHelper.buildSmsBody(
         category: 'Medical Emergency',
         latitude: 26.7922,
         longitude: 82.1998,
-        contactName: 'Papa',
       );
 
       expect(body, contains('EMERGENCY ALERT!'));
-      expect(body, contains('Dear Papa,'));
       expect(body, contains('SOS (Medical Emergency)'));
       expect(body, contains('https://maps.google.com/?q=26.7922,82.1998'));
       expect(body, contains('Nearo Offline Emergency'));

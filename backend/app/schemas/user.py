@@ -77,9 +77,8 @@ class UserResponse(BaseModel):
     is_verified: bool
     is_active: bool
     email: str | None = None
+    phone_number: str | None = None
     avatar_url: str | None = None
-    emergency_contact_phone: str | None = None
-    emergency_contact_name: str | None = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -102,18 +101,18 @@ class UserLocationResponse(BaseModel):
 class UserProfileSyncRequest(BaseModel):
     clerk_user_id: str | None = Field(None, description="Clerk User ID")
     email: str | None = Field(None, description="Resident email address")
+    phone_number: str | None = Field(None, description="Resident phone number")
+    phone: str | None = Field(None, description="Alias for phone_number")
     alias_name: str | None = Field(None, min_length=2, max_length=50, description="Display alias")
     avatar_url: str | None = Field(None, description="Profile avatar picture URL")
     preferred_radius_meters: int | None = Field(1500, ge=500, le=5000)
-    emergency_contact_phone: str | None = None
-    emergency_contact_name: str | None = None
 
 
 class UserProfileUpdateRequest(BaseModel):
     alias_name: str | None = None
     avatar_url: str | None = None
-    emergency_contact_phone: str | None = None
-    emergency_contact_name: str | None = None
+    phone_number: str | None = None
+    phone: str | None = None
 
 
 class UserProfileResponse(BaseModel):
@@ -121,12 +120,11 @@ class UserProfileResponse(BaseModel):
     clerk_user_id: str | None = None
     alias: str
     email: str | None = None
+    phone_number: str | None = None
     avatar_url: str | None = None
     radius_km: float = 1.5
     tier: str = "free"
     is_verified: bool = True
-    emergency_contact_phone: str | None = None
-    emergency_contact_name: str | None = None
     created_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)

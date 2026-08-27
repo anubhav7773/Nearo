@@ -9,8 +9,8 @@ import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/auth/presentation/bloc/auth_event.dart';
 import 'features/auth/presentation/bloc/auth_state.dart';
-import 'features/auth/presentation/screens/emergency_setup_screen.dart';
 import 'features/auth/presentation/screens/login_screen.dart';
+import 'features/auth/presentation/screens/phone_verification_screen.dart';
 import 'features/feed/presentation/bloc/feed_bloc.dart';
 import 'features/feed/presentation/screens/directory_screen.dart';
 import 'features/feed/presentation/screens/feed_screen.dart';
@@ -38,7 +38,7 @@ class _NearoAppState extends State<NearoApp> {
   final AuthBloc _authBloc = AuthBloc();
 
   bool _isAuthenticated = false;
-  bool _hasEmergencyContact = true;
+  bool _hasUserPhone = true;
   bool _isCheckingAuth = true;
 
   @override
@@ -48,7 +48,7 @@ class _NearoAppState extends State<NearoApp> {
       if (mounted) {
         setState(() {
           _isAuthenticated = false;
-          _hasEmergencyContact = true;
+          _hasUserPhone = true;
         });
       }
     };
@@ -61,19 +61,40 @@ class _NearoAppState extends State<NearoApp> {
     super.dispose();
   }
 
-  void _onLoginSuccess() async {
-    final hasContact = await SecureStorageService.hasEmergencyContact();
+  Future<void> _checkPhoneStatus() async {
+    bool hasPhone = await SecureStorageService.hasUserPhone();
+    if (!hasPhone) {
+      try {
+        final response = await ApiClient().dio.get('/api/v1/users/me');
+        if (response.statusCode == 200 && response.data != null) {
+          final phone = response.data['phone_number'] ?? response.data['phone'];
+          if (phone != null && phone.toString().trim().isNotEmpty) {
+            await SecureStorageService.saveUserPhone(phone.toString().trim());
+            hasPhone = true;
+          }
+        }
+      } catch (_) {}
+    }
+
     if (mounted) {
       setState(() {
-        _isAuthenticated = true;
-        _hasEmergencyContact = hasContact;
+        _hasUserPhone = hasPhone;
       });
     }
   }
 
-  void _onEmergencySetupComplete() {
+  void _onLoginSuccess() async {
+    await _checkPhoneStatus();
+    if (mounted) {
+      setState(() {
+        _isAuthenticated = true;
+      });
+    }
+  }
+
+  void _onPhoneVerificationComplete() {
     setState(() {
-      _hasEmergencyContact = true;
+      _hasUserPhone = true;
     });
   }
 
@@ -96,11 +117,10 @@ class _NearoAppState extends State<NearoApp> {
         home: BlocListener<AuthBloc, AuthState>(
           listener: (context, state) async {
             if (state is AuthAuthenticated) {
-              final hasContact = await SecureStorageService.hasEmergencyContact();
+              await _checkPhoneStatus();
               if (mounted) {
                 setState(() {
                   _isAuthenticated = true;
-                  _hasEmergencyContact = hasContact;
                   _isCheckingAuth = false;
                 });
               }
@@ -108,7 +128,7 @@ class _NearoAppState extends State<NearoApp> {
               if (mounted) {
                 setState(() {
                   _isAuthenticated = false;
-                  _hasEmergencyContact = true;
+                  _hasUserPhone = true;
                   _isCheckingAuth = false;
                 });
               }
@@ -122,8 +142,10 @@ class _NearoAppState extends State<NearoApp> {
                   ),
                 )
               : _isAuthenticated
-                  ? (!_hasEmergencyContact
-                      ? EmergencySetupScreen(onComplete: _onEmergencySetupComplete)
+                  ? (!_hasUserPhone
+                      ? PhoneVerificationScreen(
+                          onVerificationComplete: _onPhoneVerificationComplete,
+                        )
                       : MainNavigationScreen(onLogout: _onLogout))
                   : LoginScreen(onLoginSuccess: _onLoginSuccess),
         ),

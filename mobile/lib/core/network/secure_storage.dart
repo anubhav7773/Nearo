@@ -20,8 +20,6 @@ class SecureStorageService {
   static const String _keyUserAvatar = 'user_avatar';
   static const String _keyUserTier = 'user_tier';
   static const String _keyRadiusKm = 'user_radius_km';
-  static const String _keyEmergencyContactPhone = 'emergency_contact_phone';
-  static const String _keyEmergencyContactName = 'emergency_contact_name';
 
   // Access Token & Auth Token
   static Future<void> saveAccessToken(String token) async {
@@ -69,6 +67,7 @@ class SecureStorageService {
     required String aliasName,
     required String tier,
     String? email,
+    String? phone,
     String? avatarUrl,
   }) async {
     final futures = <Future<void>>[
@@ -80,6 +79,9 @@ class SecureStorageService {
     ];
     if (email != null) {
       futures.add(_storage.write(key: _keyUserEmail, value: email));
+    }
+    if (phone != null) {
+      futures.add(_storage.write(key: _keyUserPhone, value: phone));
     }
     if (avatarUrl != null) {
       futures.add(_storage.write(key: _keyUserAvatar, value: avatarUrl));
@@ -115,12 +117,18 @@ class SecureStorageService {
     await _storage.write(key: _keyRadiusKm, value: radiusKm.toString());
   }
 
+  // Resident Mobile Number
   static Future<String?> getUserPhone() async {
     return await _storage.read(key: _keyUserPhone);
   }
 
   static Future<void> saveUserPhone(String phone) async {
-    await _storage.write(key: _keyUserPhone, value: phone);
+    await _storage.write(key: _keyUserPhone, value: phone.trim());
+  }
+
+  static Future<bool> hasUserPhone() async {
+    final phone = await getUserPhone();
+    return phone != null && phone.trim().isNotEmpty;
   }
 
   static Future<void> setRadiusKm(double radiusKm) async {
@@ -130,30 +138,6 @@ class SecureStorageService {
   static Future<double> getRadiusKm() async {
     final val = await _storage.read(key: _keyRadiusKm);
     return val != null ? (double.tryParse(val) ?? 1.5) : 1.5;
-  }
-
-  // Emergency Guardian Contact
-  static Future<void> saveEmergencyContact({
-    required String phone,
-    required String name,
-  }) async {
-    await Future.wait([
-      _storage.write(key: _keyEmergencyContactPhone, value: phone),
-      _storage.write(key: _keyEmergencyContactName, value: name),
-    ]);
-  }
-
-  static Future<String?> getEmergencyContactPhone() async {
-    return await _storage.read(key: _keyEmergencyContactPhone);
-  }
-
-  static Future<String?> getEmergencyContactName() async {
-    return await _storage.read(key: _keyEmergencyContactName);
-  }
-
-  static Future<bool> hasEmergencyContact() async {
-    final phone = await getEmergencyContactPhone();
-    return phone != null && phone.trim().isNotEmpty;
   }
 
   // Clear Session upon Logout or DPDP Account Purge

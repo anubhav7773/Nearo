@@ -8,8 +8,8 @@ import 'package:nearo/features/auth/domain/auth_repository.dart';
 import 'package:nearo/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:nearo/features/auth/presentation/bloc/auth_event.dart';
 import 'package:nearo/features/auth/presentation/bloc/auth_state.dart';
-import 'package:nearo/features/auth/presentation/screens/emergency_setup_screen.dart';
 import 'package:nearo/features/auth/presentation/screens/login_screen.dart';
+import 'package:nearo/features/auth/presentation/screens/phone_verification_screen.dart';
 
 /// Stubs the Google SSO round-trip so widget tests never touch the
 /// google_sign_in / firebase_auth platform channels.
@@ -309,36 +309,44 @@ void main() {
     });
   });
 
-  group('EmergencySetupScreen Onboarding Tests', () {
-    testWidgets('renders header, relation chips, inputs, and actions',
+  group('PhoneVerificationScreen Mandatory Onboarding Tests', () {
+    testWidgets('renders brand badge, DPDP privacy guarantee, and validates 10-digit number',
         (WidgetTester tester) async {
       sizeViewport(tester);
       bool completed = false;
 
       await tester.pumpWidget(
         MaterialApp(
-          home: EmergencySetupScreen(onComplete: () => completed = true),
+          home: PhoneVerificationScreen(
+            onVerificationComplete: () => completed = true,
+          ),
         ),
       );
       await tester.pump(const Duration(milliseconds: 100));
 
-      expect(find.text('Set Emergency Guardian'), findsOneWidget);
-      expect(find.text('Papa'), findsOneWidget);
-      expect(find.text('Maa'), findsOneWidget);
-      expect(find.text('Brother'), findsOneWidget);
-      expect(find.text('Save Guardian & Continue to Nearo'), findsOneWidget);
-      expect(find.textContaining('Skip for now'), findsOneWidget);
+      expect(find.text('Verify Your Resident Mobile Number'), findsOneWidget);
+      expect(find.text('AN ASIVERTICALS INNOVATION'), findsOneWidget);
+      expect(find.text('+91'), findsOneWidget);
+      expect(find.text('🇮🇳'), findsOneWidget);
+      expect(find.textContaining('DPDP Privacy Guaranteed'), findsOneWidget);
+      expect(find.text('Continue to Neighborhood Network'), findsOneWidget);
 
-      // Select quick relation chip
-      await tester.tap(find.text('Papa'));
+      // Button should be disabled initially (empty input)
+      final elevatedButton = tester.widget<ElevatedButton>(find.byType(ElevatedButton));
+      expect(elevatedButton.onPressed, isNull);
+
+      // Enter valid 10-digit Indian mobile number
+      await tester.enterText(find.byType(TextFormField), '9876543210');
       await tester.pump();
 
-      // Enter 10-digit mobile number
-      await tester.enterText(find.byType(TextFormField).last, '9876543210');
-      await tester.pump();
+      expect(find.text('10/10'), findsOneWidget);
 
-      // Tap Save
-      await tester.tap(find.text('Save Guardian & Continue to Nearo'));
+      // Button should be enabled now
+      final enabledButton = tester.widget<ElevatedButton>(find.byType(ElevatedButton));
+      expect(enabledButton.onPressed, isNotNull);
+
+      // Tap submit
+      await tester.tap(find.text('Continue to Neighborhood Network'));
       await tester.pump(const Duration(milliseconds: 300));
 
       expect(completed, isTrue);
