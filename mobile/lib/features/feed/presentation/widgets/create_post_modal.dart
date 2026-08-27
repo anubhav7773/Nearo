@@ -64,7 +64,7 @@ class _CreatePostModalState extends State<CreatePostModal> {
       lng = pos.longitude;
     } catch (_) {}
 
-    // 1. Dispatch CreatePostEvent to network
+    // 1. Dispatch CreatePostEvent to network and optimistic feed update
     feedBloc.add(
       CreatePostEvent(
         category: _selectedCategory,
@@ -77,15 +77,7 @@ class _CreatePostModalState extends State<CreatePostModal> {
       ),
     );
 
-    // 2. Immediately trigger active feed reload with current coordinates
-    feedBloc.add(FetchFeed(
-      lat: lat,
-      lng: lng,
-      radiusMeters: feedState is FeedLoaded ? feedState.activeRadiusMeters : 5000,
-      category: feedState is FeedLoaded ? feedState.activeCategory : 'all',
-    ));
-
-    // 3. Close modal bottom sheet & show snackbar
+    // 2. Close modal bottom sheet & show snackbar
     if (mounted) {
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(

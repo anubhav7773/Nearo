@@ -140,18 +140,32 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
   }
 
   Future<void> _onRefreshFeed(RefreshFeed event, Emitter<FeedState> emit) async {
+    double? lat;
+    double? lng;
+    int radius = 1500;
+    String category = 'all';
+
     if (state is FeedLoaded) {
       final currentState = state as FeedLoaded;
       emit(currentState.copyWith(isRefreshing: true));
-      add(FetchFeed(
-        lat: currentState.userLat,
-        lng: currentState.userLng,
-        radiusMeters: currentState.activeRadiusMeters,
-        category: currentState.activeCategory,
-      ));
-    } else {
-      add(FetchFeed());
+      lat = currentState.userLat;
+      lng = currentState.userLng;
+      radius = currentState.activeRadiusMeters;
+      category = currentState.activeCategory;
     }
+
+    final pos = await _determinePosition();
+    if (pos != null) {
+      lat = pos.latitude;
+      lng = pos.longitude;
+    }
+
+    add(FetchFeed(
+      lat: lat,
+      lng: lng,
+      radiusMeters: radius,
+      category: category,
+    ));
   }
 
   Future<void> _onChangeRadiusFilter(
@@ -254,6 +268,38 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
       );
 
       if (response.statusCode == 201 || response.statusCode == 200) {
+        if (response.data != null && response.data is Map<String, dynamic>) {
+          final data = response.data as Map<String, dynamic>;
+          final createdPost = CommunityPostItem(
+            id: data['id']?.toString() ?? DateTime.now().millisecondsSinceEpoch.toString(),
+            authorAlias: data['author_alias'] as String? ?? 'You',
+            authorTier: data['author_tier'] as String? ?? 'free',
+            authorAvatarUrl: data['author_avatar_url'] as String?,
+            category: data['category'] as String? ?? event.category,
+            title: data['title'] as String? ?? event.title,
+            content: data['content'] as String? ?? event.content,
+            upvotes: 0,
+            isUpvoted: false,
+            commentsCount: 0,
+            latitude: validLat,
+            longitude: validLng,
+            mediaUrls: const [],
+            createdAt: data['created_at'] != null
+                ? (DateTime.tryParse(data['created_at'].toString()) ?? DateTime.now())
+                : DateTime.now(),
+            distanceMeters: 0,
+            distanceText: 'Just now · Here',
+          );
+
+          if (state is FeedLoaded) {
+            final current = state as FeedLoaded;
+            // Prepend new post to local feed items immediately (zero latency)
+            final updatedItems = [createdPost, ...current.items];
+            emit(current.copyWith(items: updatedItems));
+          }
+        }
+
+        // Trigger background sync to reconcile feed with server
         add(RefreshFeed());
       }
     } catch (_) {

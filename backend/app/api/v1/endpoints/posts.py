@@ -191,6 +191,12 @@ async def create_post(
             row["created_at"] if row and "created_at" in row else datetime.now()
         )
 
+        tier_val = (
+            current_user.tier.value
+            if hasattr(current_user.tier, "value")
+            else str(getattr(current_user, "tier", "free") or "free")
+        )
+
         return PostCreateResponse(
             id=row["id"] if row and "id" in row else post_id,
             status="published",
@@ -199,7 +205,13 @@ async def create_post(
             content=content_text,
             category=cat_val,
             author_alias=getattr(current_user, "alias_name", None) or "Citizen",
+            author_tier=tier_val,
+            author_avatar_url=getattr(current_user, "avatar_url", None),
+            latitude=lat,
+            longitude=lng,
             distance_meters=0,
+            distance_text="Just now · Here",
+            media_urls=payload.media_urls or [],
         )
     except Exception as err:
         await db.rollback()

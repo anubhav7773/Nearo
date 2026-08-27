@@ -41,7 +41,13 @@ class PostCreateResponse(BaseModel):
     content: str | None = None
     category: str | None = None
     author_alias: str | None = "Citizen"
+    author_tier: str | None = "free"
+    author_avatar_url: str | None = None
+    latitude: float | None = None
+    longitude: float | None = None
     distance_meters: int | None = 0
+    distance_text: str | None = "Just now · Here"
+    media_urls: list[str] = Field(default_factory=list)
 
 
 class PostResponse(BaseModel):
