@@ -38,16 +38,9 @@ class OfflineSosModal extends StatelessWidget {
   }
 
   Future<void> _onSendSms(BuildContext context) async {
-    final phone = await SecureStorageService.getEmergencyContactPhone();
-    if (phone == null || phone.trim().isEmpty) {
-      if (!context.mounted) return;
-      Navigator.pop(context);
-      Navigator.of(context).pushNamed('/emergency-number-setup');
-      return;
-    }
-    if (!context.mounted) return;
     Navigator.pop(context);
-    OfflineSosHelper.triggerOfflineSms(
+    await OfflineSosHelper.sendEmergencySMS(
+      context: context,
       category: emergencyType,
       latitude: latitude,
       longitude: longitude,
