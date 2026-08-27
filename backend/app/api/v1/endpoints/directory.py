@@ -55,11 +55,11 @@ async def get_nearby_directory(
 
     sql = f"""
         SELECT b.id, b.name, b.category, b.description, b.whatsapp_number, b.is_verified, b.created_at,
-               ROUND(ST_Distance(b.location, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography))
+               ROUND(ST_Distance(b.location::geography, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography))
                AS distance_meters
         FROM public.businesses b
         WHERE b.is_active = true
-          AND ST_DWithin(b.location, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography, :radius_meters)
+          AND ST_DWithin(b.location::geography, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography, :radius_meters)
           {category_filter}
         ORDER BY distance_meters ASC, b.is_verified DESC;
     """

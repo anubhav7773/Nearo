@@ -42,6 +42,8 @@ async def get_nearby_posts(
     request: Request,
     lat: float | None = Query(None, description="Current user latitude"),
     lng: float | None = Query(None, description="Current user longitude"),
+    latitude: float | None = Query(None, description="Current user latitude alias"),
+    longitude: float | None = Query(None, description="Current user longitude alias"),
     radius_meters: int = Query(
         5000, ge=100, le=50000, description="Search radius in meters"
     ),
@@ -70,8 +72,8 @@ async def get_nearby_posts(
             )
 
     # 2. Resolve user coordinates
-    user_lat = lat
-    user_lon = lng
+    user_lat = lat if lat is not None else latitude
+    user_lon = lng if lng is not None else longitude
 
     if user_lat is None or user_lon is None:
         if current_user:
@@ -164,7 +166,7 @@ async def create_post(
                 created_at, updated_at
             ) VALUES (
                 :id, :user_id, :author_id, :title, :content, :body, :category,
-                ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
+                ST_SetSRID(ST_MakePoint(:lng, :lat), 4326),
                 :media_urls, false, false, 0, 0,
                 NOW(), NOW()
             )

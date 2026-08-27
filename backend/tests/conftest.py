@@ -31,6 +31,7 @@ def override_dependencies():
     mock_result.scalar_one_or_none.return_value = test_user
     mock_result.scalar_one.return_value = 0
     mock_result.all.return_value = []
+    mock_result.first.return_value = None
     mock_db.execute.return_value = mock_result
     mock_db.commit.return_value = None
     mock_db.refresh.return_value = None

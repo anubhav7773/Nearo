@@ -29,7 +29,7 @@ class Business(Base):
     description = Column(Text, nullable=True)
     whatsapp_number = Column(String(20), nullable=False)
     location = Column(
-        Geography(geometry_type="POINT", srid=4326, spatial_index=True),
+        Geometry(geometry_type="POINT", srid=4326, spatial_index=True),
         nullable=False,
     )
     is_verified = Column(Boolean, default=False, nullable=False)

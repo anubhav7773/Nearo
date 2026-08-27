@@ -21,19 +21,29 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
   Future<Position?> _determinePosition() async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) return null;
+      if (!serviceEnabled) {
+        return await Geolocator.getLastKnownPosition();
+      }
 
       LocationPermission permission = await Geolocator.checkPermission();
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
-        if (permission == LocationPermission.denied) return null;
+        if (permission == LocationPermission.denied) {
+          return await Geolocator.getLastKnownPosition();
+        }
       }
-      if (permission == LocationPermission.deniedForever) return null;
+      if (permission == LocationPermission.deniedForever) {
+        return await Geolocator.getLastKnownPosition();
+      }
 
-      return await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.medium,
-        timeLimit: const Duration(seconds: 4),
-      );
+      try {
+        return await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.medium,
+          timeLimit: const Duration(seconds: 4),
+        );
+      } catch (_) {
+        return await Geolocator.getLastKnownPosition();
+      }
     } catch (_) {
       return null;
     }
@@ -62,6 +72,8 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
       final queryParams = <String, dynamic>{
         'lat': lat,
         'lng': lng,
+        'latitude': lat,
+        'longitude': lng,
         'radius_meters': radius,
         'page': 1,
         'limit': 20,
@@ -71,7 +83,7 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
       }
 
       final response = await _apiClient.dio.get(
-        ApiEndpoints.posts,
+        ApiEndpoints.feed,
         queryParameters: queryParams,
       );
 
@@ -232,9 +244,12 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
         data: {
           'title': event.title,
           'content': event.content,
+          'body': event.content,
           'category': event.category,
           'latitude': validLat,
           'longitude': validLng,
+          'lat': validLat,
+          'lng': validLng,
         },
       );
 

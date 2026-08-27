@@ -21,14 +21,17 @@ router = APIRouter()
 
 
 @router.post(
-    "/broadcast",
+    "",
     response_model=SOSBroadcastResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Trigger Instant Civic SOS Emergency Broadcast",
-    description=(
-        "Publishes an emergency alert to all verified residents within 1.5 km via "
-        "Redis PubSub and PostGIS spatial reach math with a 5-minute cooldown."
-    ),
+    description="Publishes an emergency alert to verified residents within geographic radius.",
+)
+@router.post(
+    "/broadcast",
+    response_model=SOSBroadcastResponse,
+    status_code=status.HTTP_201_CREATED,
+    include_in_schema=False,
 )
 @router.post(
     "/trigger",
@@ -90,15 +93,19 @@ async def get_user_active_sos(
     description="Returns all unresolved SOS emergency alerts within the resident's neighborhood radius.",
 )
 async def get_nearby_active_sos(
-    lat: float = Query(26.7922, description="Latitude"),
-    lng: float = Query(82.1998, description="Longitude"),
+    lat: float | None = Query(None, description="Latitude"),
+    lng: float | None = Query(None, description="Longitude"),
+    latitude: float | None = Query(None, description="Latitude alias"),
+    longitude: float | None = Query(None, description="Longitude alias"),
     radius_meters: int = Query(3000, ge=500, le=10000, description="Radius in meters"),
     db: AsyncSession = Depends(get_db),
 ):
+    target_lat = lat if lat is not None else (latitude if latitude is not None else 26.7922)
+    target_lng = lng if lng is not None else (longitude if longitude is not None else 82.1998)
     events = await AlertService.fetch_active_sos(
         db=db,
-        latitude=lat,
-        longitude=lng,
+        latitude=target_lat,
+        longitude=target_lng,
         radius_meters=radius_meters,
     )
     return events

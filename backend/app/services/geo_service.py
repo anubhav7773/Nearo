@@ -99,9 +99,9 @@ class GeoService:
             func.cast(point_geom, text("geography")),
         ).label("distance_meters")
 
-        # Extract raw coordinates for jittering (cast to geometry for ST_X/ST_Y)
-        raw_lat = func.ST_Y(func.cast(Post.location, text("geometry"))).label("raw_lat")
-        raw_lon = func.ST_X(func.cast(Post.location, text("geometry"))).label("raw_lon")
+        # Extract raw coordinates for jittering
+        raw_lat = func.ST_Y(Post.location).label("raw_lat")
+        raw_lon = func.ST_X(Post.location).label("raw_lon")
 
         # Base query joining author to retrieve profile metadata
         where_conditions = [

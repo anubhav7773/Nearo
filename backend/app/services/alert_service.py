@@ -55,11 +55,13 @@ class AlertService:
         dispatched_count = 0
         try:
             reach_sql = """
-                SELECT COUNT(DISTINCT id) AS reach_count FROM public.users
-                WHERE is_active = true
-                  AND id != :user_id
+                SELECT COUNT(DISTINCT u.id) AS reach_count
+                FROM public.users u
+                JOIN public.user_locations ul ON ul.user_id = u.id
+                WHERE u.is_active = true
+                  AND u.id != :user_id
                   AND ST_DWithin(
-                    location,
+                    ul.last_known_location::geography,
                     ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
                     :radius_meters
                   );
@@ -184,7 +186,11 @@ class AlertService:
     ) -> ActiveSOSResponse:
         """Fetch current user's active unresolved SOS event if one exists."""
         stmt = (
-            select(SOSEvent)
+            select(
+                SOSEvent,
+                func.ST_Y(SOSEvent.current_location).label("latitude"),
+                func.ST_X(SOSEvent.current_location).label("longitude"),
+            )
             .where(
                 SOSEvent.triggered_by == user_id,
                 SOSEvent.status == SOSStatus.ACTIVE,
@@ -192,7 +198,24 @@ class AlertService:
             .order_by(SOSEvent.created_at.desc())
         )
         res = await db.execute(stmt)
-        active_event = res.scalar_one_or_none()
+        row = res.first()
+
+        if not row:
+            return ActiveSOSResponse(has_active=False, event=None)
+
+        if isinstance(row, (tuple, list)) and len(row) >= 3:
+            active_event, ev_lat, ev_lon = row[0], row[1], row[2]
+        elif isinstance(row, SOSEvent):
+            active_event, ev_lat, ev_lon = row, 26.7922, 82.1998
+        elif hasattr(row, "__getitem__"):
+            try:
+                active_event = row[0]
+                ev_lat = row[1] if len(row) > 1 else 26.7922
+                ev_lon = row[2] if len(row) > 2 else 82.1998
+            except Exception:
+                return ActiveSOSResponse(has_active=False, event=None)
+        else:
+            return ActiveSOSResponse(has_active=False, event=None)
 
         if not active_event or not isinstance(active_event, SOSEvent):
             return ActiveSOSResponse(has_active=False, event=None)
@@ -204,6 +227,9 @@ class AlertService:
         )
 
         category_val = getattr(active_event, "category", None) or getattr(active_event, "emergency_type", "security")
+        lat_val = float(ev_lat) if ev_lat is not None else 26.7922
+        lon_val = float(ev_lon) if ev_lon is not None else 82.1998
+
         detail = SOSEventDetail(
             id=active_event.id,
             event_id=active_event.id,
@@ -214,8 +240,8 @@ class AlertService:
             status=active_event.status,
             responders_count=active_event.responders_count,
             dispatched_neighbors_count=24,
-            latitude=26.7922,
-            longitude=82.1998,
+            latitude=lat_val,
+            longitude=lon_val,
             distance_meters=0,
             created_at=created_at_val,
             resolved_at=None,

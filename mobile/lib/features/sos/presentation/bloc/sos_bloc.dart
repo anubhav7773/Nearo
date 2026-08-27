@@ -73,6 +73,8 @@ class SosBloc extends Bloc<SosEvent, SosState> {
           'description': event.description ?? 'Civic SOS Alert Triggered',
           'latitude': validLat,
           'longitude': validLng,
+          'lat': validLat,
+          'lng': validLng,
         },
       );
 

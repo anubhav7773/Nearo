@@ -67,6 +67,26 @@ class CommunityPostItem extends FeedItem {
   }) : super(type: 'community_post');
 
   factory CommunityPostItem.fromJson(Map<String, dynamic> json) {
+    double? lat = (json['latitude'] as num?)?.toDouble() ??
+        (json['lat'] as num?)?.toDouble();
+    double? lng = (json['longitude'] as num?)?.toDouble() ??
+        (json['lng'] as num?)?.toDouble();
+
+    if (lat == null || lng == null) {
+      if (json['location'] is Map) {
+        final locMap = json['location'] as Map<String, dynamic>;
+        if (locMap['coordinates'] is List &&
+            (locMap['coordinates'] as List).length >= 2) {
+          lng = ((locMap['coordinates'] as List)[0] as num?)?.toDouble();
+          lat = ((locMap['coordinates'] as List)[1] as num?)?.toDouble();
+        }
+      } else if (json['coordinates'] is List &&
+          (json['coordinates'] as List).length >= 2) {
+        lng = ((json['coordinates'] as List)[0] as num?)?.toDouble();
+        lat = ((json['coordinates'] as List)[1] as num?)?.toDouble();
+      }
+    }
+
     return CommunityPostItem(
       id: json['id'] as String? ?? '',
       authorAlias: json['author_alias'] as String? ?? 'Resident',
@@ -78,8 +98,8 @@ class CommunityPostItem extends FeedItem {
       upvotes: json['upvotes'] as int? ?? 0,
       isUpvoted: json['has_upvoted'] as bool? ?? false,
       commentsCount: json['comments_count'] as int? ?? 0,
-      latitude: (json['latitude'] as num?)?.toDouble(),
-      longitude: (json['longitude'] as num?)?.toDouble(),
+      latitude: lat,
+      longitude: lng,
       mediaUrls: (json['media_urls'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??

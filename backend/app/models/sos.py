@@ -45,15 +45,15 @@ class SOSEvent(Base):
     )  # 'medical', 'security', 'fire', 'scam', 'other'
     description = Column(Text, nullable=True)
     location = Column(
-        Geography(geometry_type="POINT", srid=4326),
+        Geometry(geometry_type="POINT", srid=4326),
         nullable=True,
     )
     initial_location = Column(
-        Geography(geometry_type="POINT", srid=4326),
+        Geometry(geometry_type="POINT", srid=4326),
         nullable=False,
     )
     current_location = Column(
-        Geography(geometry_type="POINT", srid=4326, spatial_index=True),
+        Geometry(geometry_type="POINT", srid=4326, spatial_index=True),
         nullable=False,
     )
     status = Column(

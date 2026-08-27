@@ -106,3 +106,39 @@ def test_sos_broadcast_with_lat_lng_aliases():
     assert data["status"] == "active"
     assert "event_id" in data
     assert "dispatched_neighbors_count" in data
+
+
+def test_sos_root_post_endpoint():
+    """Verify POST /api/v1/sos works identically to /broadcast."""
+    user_id = str(uuid.uuid4())
+    token = create_access_token(subject=user_id)
+
+    response = client.post(
+        "/api/v1/sos",
+        headers={"Authorization": f"Bearer {token}"},
+        json={
+            "category": "security",
+            "description": "Urgent assistance requested",
+            "latitude": 26.7922,
+            "longitude": 82.1998,
+        },
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["status"] == "active"
+    assert "event_id" in data
+
+
+def test_get_nearby_active_sos_with_latitude_longitude_aliases():
+    """Verify GET /api/v1/sos/nearby accepts latitude and longitude query params."""
+    response = client.get(
+        "/api/v1/sos/nearby",
+        params={
+            "latitude": 26.7922,
+            "longitude": 82.1998,
+            "radius_meters": 5000,
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)

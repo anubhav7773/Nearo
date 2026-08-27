@@ -122,7 +122,7 @@ class UserLocation(Base):
     )
     pincode = Column(String(10), nullable=False)
     last_known_location = Column(
-        Geography(geometry_type="POINT", srid=4326, spatial_index=True),
+        Geometry(geometry_type="POINT", srid=4326, spatial_index=True),
         nullable=False,
     )
     preferred_radius_meters = Column(

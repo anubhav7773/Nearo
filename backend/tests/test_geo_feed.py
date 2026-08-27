@@ -32,6 +32,23 @@ def test_get_feed_endpoint():
     assert isinstance(data["data"], list)
 
 
+def test_get_feed_endpoint_with_latitude_longitude_aliases():
+    """Verify GET /api/v1/posts/feed accepts full latitude and longitude query params."""
+    response = client.get(
+        "/api/v1/posts/feed",
+        params={
+            "latitude": 26.7922,
+            "longitude": 82.1998,
+            "radius_meters": 3000,
+            "category": "general",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert "data" in data
+    assert isinstance(data["data"], list)
+
+
 def test_get_posts_endpoint_alias():
     """Verify GET /api/v1/posts returns the same feed structure."""
     response = client.get(
