@@ -197,10 +197,7 @@ class AlertService:
             )
             .where(
                 SOSEvent.triggered_by == user_id,
-                or_(
-                    SOSEvent.status == SOSStatus.ACTIVE,
-                    func.lower(cast(SOSEvent.status, String)) == "active",
-                ),
+                func.cast(SOSEvent.status, String) == "active",
             )
             .order_by(SOSEvent.created_at.desc())
         )
@@ -416,10 +413,7 @@ class AlertService:
         stmt = (
             select(SOSEvent, distance_expr, raw_lat, raw_lon)
             .where(
-                or_(
-                    SOSEvent.status == SOSStatus.ACTIVE,
-                    func.lower(cast(SOSEvent.status, String)) == "active",
-                ),
+                func.cast(SOSEvent.status, String) == "active",
                 func.ST_DWithin(
                     func.ST_Transform(SOSEvent.current_location, 3857),
                     func.ST_Transform(point_geom, 3857),

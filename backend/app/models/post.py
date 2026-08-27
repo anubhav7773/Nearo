@@ -106,8 +106,8 @@ class PostUpvote(Base):
     __table_args__ = (Index("idx_post_upvotes_post_user", post_id, user_id),)
 
 
-class Comment(Base):
-    __tablename__ = "comments"
+class PostComment(Base):
+    __tablename__ = "post_comments"
 
     id = Column(
         UUID(as_uuid=True),
@@ -121,10 +121,15 @@ class Comment(Base):
         nullable=False,
         index=True,
     )
-    author_id = Column(
+    user_id = Column(
         UUID(as_uuid=True),
         ForeignKey("users.id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
+    )
+    author_id = Column(
+        UUID(as_uuid=True),
+        nullable=True,
         index=True,
     )
     content = Column(Text, nullable=False)
@@ -140,22 +145,14 @@ class Comment(Base):
         nullable=False,
     )
 
-    @property
-    def user_id(self):
-        return self.author_id
-
-    @user_id.setter
-    def user_id(self, value):
-        self.author_id = value
-
     # Relationships
     post = relationship("Post", backref="post_comments")
-    author = relationship("User")
+    author = relationship("User", foreign_keys=[user_id])
 
-    __table_args__ = (Index("idx_comments_post_created", post_id, created_at.asc()),)
+    __table_args__ = (Index("idx_post_comments_post_created", post_id, created_at.asc()),)
 
 
-# Alias PostComment to Comment for bidirectional compatibility
-PostComment = Comment
+# Alias Comment to PostComment for bidirectional compatibility
+Comment = PostComment
 
-__all__ = ["Post", "PostCategory", "PostUpvote", "Comment", "PostComment"]
+__all__ = ["Post", "PostCategory", "PostUpvote", "PostComment", "Comment"]

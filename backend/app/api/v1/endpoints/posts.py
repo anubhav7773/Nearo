@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_current_user_optional
 from app.core.database import get_db
 from app.core.redis import check_rate_limit, get_redis
-from app.models.post import Comment, Post, PostUpvote
+from app.models.post import Comment, Post, PostComment, PostUpvote
 from app.models.user import User
 from app.schemas.post import (
     CommentCreate,
@@ -343,18 +343,18 @@ async def get_post_comments(
         # 2. Query comments with outer join on User
         stmt = (
             select(
-                Comment.id,
-                Comment.post_id,
-                Comment.author_id,
-                Comment.content,
-                Comment.created_at,
+                PostComment.id,
+                PostComment.post_id,
+                PostComment.user_id,
+                PostComment.content,
+                PostComment.created_at,
                 User.alias_name.label("author_alias"),
                 User.avatar_url.label("author_avatar_url"),
                 User.tier.label("author_tier"),
             )
-            .outerjoin(User, Comment.author_id == User.id)
-            .where(Comment.post_id == post_uuid)
-            .order_by(Comment.created_at.asc())
+            .outerjoin(User, PostComment.user_id == User.id)
+            .where(PostComment.post_id == post_uuid)
+            .order_by(PostComment.created_at.asc())
         )
         res = await db.execute(stmt)
         rows = res.mappings().all()
@@ -372,8 +372,8 @@ async def get_post_comments(
                 CommentResponse(
                     id=row["id"],
                     post_id=row["post_id"],
-                    author_id=row["author_id"],
-                    user_id=row["author_id"],
+                    author_id=row["user_id"],
+                    user_id=row["user_id"],
                     author_alias=alias_val,
                     author_name=alias_val,
                     author_avatar_url=avatar_val,
@@ -443,9 +443,10 @@ async def create_post_comment(
         comment_id = uuid.uuid4()
         now_dt = datetime.now()
 
-        new_comment = Comment(
+        new_comment = PostComment(
             id=comment_id,
             post_id=post_uuid,
+            user_id=current_user.id,
             author_id=current_user.id,
             content=payload.content.strip(),
             created_at=now_dt,

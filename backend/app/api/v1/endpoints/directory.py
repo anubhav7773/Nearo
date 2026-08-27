@@ -40,8 +40,8 @@ async def get_nearby_directory(
     current_user: User | None = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ):
-    user_lat = lat if lat is not None else 26.7922
-    user_lon = lng if lng is not None else 82.1998
+    user_lat = float(lat) if lat is not None else 26.7922
+    user_lon = float(lng) if lng is not None else 82.1998
 
     params: dict = {
         "lat": user_lat,
@@ -55,11 +55,11 @@ async def get_nearby_directory(
 
     sql = f"""
         SELECT b.id, b.name, b.category, b.description, b.whatsapp_number, b.is_verified, b.created_at,
-               ROUND(ST_Distance(b.location::geography, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography))
+               ROUND(ST_Distance(ST_Transform(b.location, 3857), ST_Transform(ST_SetSRID(ST_MakePoint(:lng, :lat), 4326), 3857)))
                AS distance_meters
         FROM public.businesses b
         WHERE b.is_active = true
-          AND ST_DWithin(b.location::geography, ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography, :radius_meters)
+          AND ST_DWithin(ST_Transform(b.location, 3857), ST_Transform(ST_SetSRID(ST_MakePoint(:lng, :lat), 4326), 3857), :radius_meters)
           {category_filter}
         ORDER BY distance_meters ASC, b.is_verified DESC;
     """
@@ -115,8 +115,8 @@ async def register_business(
     db: AsyncSession = Depends(get_db),
 ):
     try:
-        lat = payload.latitude or payload.lat or 26.7922
-        lng = payload.longitude or payload.lng or 82.1998
+        lat = float(payload.latitude or payload.lat or 26.7922)
+        lng = float(payload.longitude or payload.lng or 82.1998)
 
         point_geom = func.ST_SetSRID(func.ST_MakePoint(lng, lat), 4326)
 
