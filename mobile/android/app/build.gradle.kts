@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.example.nearo"
+    namespace = "com.nearo.app"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
@@ -16,11 +16,11 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.nearo"
+        applicationId = "com.nearo.app"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
-        versionCode = 3
-        versionName = "1.0.6"
+        versionCode = 4
+        versionName = "1.0.7"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
