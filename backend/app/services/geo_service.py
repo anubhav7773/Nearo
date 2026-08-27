@@ -91,7 +91,9 @@ class GeoService:
         from app.models.post import PostCategory, PostUpvote
 
         offset = (page - 1) * limit
-        point_geom = func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 4326)
+        point_geom = func.ST_SetSRID(
+            func.ST_MakePoint(float(longitude), float(latitude)), 4326
+        )
 
         # Distance calculation in meters using PostGIS geography casting
         distance_expr = func.ST_Distance(
@@ -108,41 +110,43 @@ class GeoService:
             func.ST_DWithin(
                 func.cast(Post.location, text("geography")),
                 func.cast(point_geom, text("geography")),
-                radius_meters,
+                float(radius_meters),
             )
         ]
 
-        if category and category.strip().lower() not in ("all", "all updates", ""):
+        if category and category.strip().lower() not in (
+            "all",
+            "all updates",
+            "all_updates",
+            "",
+        ):
             raw_cat = category.strip().lower()
-            cat_val = raw_cat.replace(" ", "_")
-            # Map friendly tab names
-            if "civic" in cat_val:
+            cat_clean = raw_cat.replace(" ", "_").replace("-", "_")
+            if "civic" in cat_clean:
                 cat_val = "civic_issue"
-            elif "alert" in cat_val or "scam" in cat_val:
+            elif "alert" in cat_clean or "scam" in cat_clean:
                 cat_val = "alert"
-            elif "help" in cat_val:
+            elif "help" in cat_clean:
                 cat_val = "help_needed"
-            elif "trade" in cat_val or "buy" in cat_val or "sell" in cat_val:
+            elif "trade" in cat_clean or "buy" in cat_clean or "sell" in cat_clean:
                 cat_val = "trade"
-            elif "general" in cat_val:
+            elif "general" in cat_clean:
                 cat_val = "general"
+            else:
+                cat_val = cat_clean
 
+            cat_filters = [
+                func.lower(func.cast(Post.category, text("text"))) == cat_val,
+                func.lower(func.cast(Post.category, text("text"))) == raw_cat,
+                func.lower(func.cast(Post.category, text("text"))) == cat_clean,
+            ]
             try:
                 cat_enum = PostCategory(cat_val)
-                where_conditions.append(
-                    or_(
-                        Post.category == cat_enum,
-                        func.lower(func.cast(Post.category, text("text"))) == cat_val,
-                        func.lower(func.cast(Post.category, text("text"))) == raw_cat,
-                    )
-                )
+                cat_filters.append(Post.category == cat_enum)
             except ValueError:
-                where_conditions.append(
-                    or_(
-                        func.lower(func.cast(Post.category, text("text"))) == cat_val,
-                        func.lower(func.cast(Post.category, text("text"))) == raw_cat,
-                    )
-                )
+                pass
+
+            where_conditions.append(or_(*cat_filters))
 
         query = (
             select(

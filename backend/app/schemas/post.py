@@ -7,8 +7,30 @@ from app.models.post import PostCategory
 from app.schemas.ad import NativeAdResponse
 
 
+def normalize_post_category(val: str | PostCategory | None) -> PostCategory:
+    if not val:
+        return PostCategory.GENERAL
+    if isinstance(val, PostCategory):
+        return val
+    s = str(val).strip().lower().replace(" ", "_").replace("-", "_")
+    if "civic" in s:
+        return PostCategory.CIVIC_ISSUE
+    if "alert" in s or "scam" in s:
+        return PostCategory.ALERT
+    if "help" in s:
+        return PostCategory.HELP_NEEDED
+    if "trade" in s or "buy" in s or "sell" in s:
+        return PostCategory.TRADE
+    if "general" in s:
+        return PostCategory.GENERAL
+    try:
+        return PostCategory(s)
+    except ValueError:
+        return PostCategory.GENERAL
+
+
 class PostCreate(BaseModel):
-    category: PostCategory = PostCategory.GENERAL
+    category: str | PostCategory = PostCategory.GENERAL
     title: str | None = Field(None, max_length=150)
     content: str | None = Field(None, min_length=1)
     body: str | None = Field(None, min_length=1, description="Alias for content")
@@ -20,6 +42,7 @@ class PostCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_fields(self):
+        self.category = normalize_post_category(self.category)
         if not self.content and not self.body:
             raise ValueError("Either 'content' or 'body' must be provided.")
         if not self.content and self.body:

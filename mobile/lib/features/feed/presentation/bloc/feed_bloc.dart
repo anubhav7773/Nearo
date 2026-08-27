@@ -9,6 +9,16 @@ import 'feed_state.dart';
 class FeedBloc extends Bloc<FeedEvent, FeedState> {
   final ApiClient _apiClient = ApiClient();
 
+  static String normalizeCategory(String c) {
+    final s = c.toLowerCase().replaceAll(' ', '_').replaceAll('-', '_');
+    if (s.contains('civic')) return 'civic_issue';
+    if (s.contains('alert') || s.contains('scam')) return 'alert';
+    if (s.contains('help')) return 'help_needed';
+    if (s.contains('trade') || s.contains('buy') || s.contains('sell')) return 'trade';
+    if (s.contains('general')) return 'general';
+    return s;
+  }
+
   FeedBloc() : super(FeedInitial()) {
     on<FetchFeed>(_onFetchFeed);
     on<RefreshFeed>(_onRefreshFeed);
@@ -78,8 +88,9 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
         'page': 1,
         'limit': 20,
       };
-      if (category != 'all' && category.isNotEmpty) {
-        queryParams['category'] = category;
+      final normCat = normalizeCategory(category);
+      if (normCat != 'all' && normCat != 'all_updates' && category.isNotEmpty) {
+        queryParams['category'] = normCat;
       }
 
       final response = await _apiClient.dio.get(
@@ -99,13 +110,12 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
             .map((e) => FeedItem.fromJson(e as Map<String, dynamic>))
             .toList();
 
-        // Client-side category matching if needed
-        if (category != 'all' && category.isNotEmpty) {
-          final normalizedCat = category.toLowerCase().replaceAll(' ', '_');
+        // Client-side category matching with normalized category helper
+        if (normCat != 'all' && normCat != 'all_updates' && category.isNotEmpty) {
           items = items.where((item) {
             if (item is CommunityPostItem) {
-              final postCat = item.category.toLowerCase().replaceAll(' ', '_');
-              return postCat == normalizedCat || postCat.contains(normalizedCat);
+              final postCat = normalizeCategory(item.category);
+              return postCat == normCat;
             }
             return true; // Keep ads in feed
           }).toList();
@@ -293,9 +303,15 @@ class FeedBloc extends Bloc<FeedEvent, FeedState> {
 
           if (state is FeedLoaded) {
             final current = state as FeedLoaded;
-            // Prepend new post to local feed items immediately (zero latency)
-            final updatedItems = [createdPost, ...current.items];
-            emit(current.copyWith(items: updatedItems));
+            final activeNorm = normalizeCategory(current.activeCategory);
+            final postNorm = normalizeCategory(createdPost.category);
+            // Prepend if on All Updates tab or matching category tab
+            if (activeNorm == 'all' ||
+                activeNorm == 'all_updates' ||
+                activeNorm == postNorm) {
+              final updatedItems = [createdPost, ...current.items];
+              emit(current.copyWith(items: updatedItems));
+            }
           }
         }
 
