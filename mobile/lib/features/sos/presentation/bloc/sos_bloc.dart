@@ -118,9 +118,12 @@ class SosBloc extends Bloc<SosEvent, SosState> {
 
       emit(SosDispatchedSuccess(sosEvent: sosEvent));
     } catch (err) {
+      final message = err.toString().replaceFirst('Exception: ', '');
       emit(
         SosDispatchFailure(
-          errorMessage: 'Unable to connect to emergency dispatch server. Check connection or use Offline Mode.',
+          errorMessage: message.isNotEmpty
+              ? message
+              : 'Unable to connect to emergency dispatch server. Check connection or use Offline Mode.',
           category: category,
           description: description,
           latitude: validLat,

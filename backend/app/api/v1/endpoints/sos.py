@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.deps import get_current_user, get_current_user_optional
+from app.api.deps import get_current_user
 from app.core.database import get_db
 from app.core.redis import check_rate_limit, get_redis
 from app.models.user import User
@@ -59,15 +59,17 @@ async def broadcast_sos(
 
     # 2. Trigger SOS creation, geographic recipient lookup, and PubSub dispatch
     emergency_cat = payload.category or payload.emergency_type or "security"
+    radius = int(payload.radius_meters or payload.broadcast_radius_meters or 1500)
+
     response = await AlertService.create_and_dispatch_sos(
         db=db,
         redis=redis,
         user_id=current_user.id,
         emergency_type=emergency_cat,
         description=payload.description,
-        latitude=payload.latitude,
-        longitude=payload.longitude,
-        broadcast_radius_meters=1500,
+        latitude=float(payload.latitude or payload.lat or 26.7922),
+        longitude=float(payload.longitude or payload.lng or 82.1998),
+        broadcast_radius_meters=radius,
     )
 
     return response
@@ -111,11 +113,31 @@ async def get_nearby_active_sos(
     return events
 
 
+@router.get(
+    "/{event_id}",
+    response_model=SOSEventDetail,
+    summary="Get SOS Emergency Details by ID",
+    description="Fetches specific active or past SOS event details.",
+)
+async def get_sos_event_details(
+    event_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    return await AlertService.fetch_sos_by_id(db=db, event_id=event_id)
+
+
 @router.post(
     "/{event_id}/resolve",
     response_model=SOSResolveResponse,
     summary="Cancel / Resolve Active SOS Emergency",
     description="Marks an active emergency as resolved and notifies responders.",
+)
+@router.post(
+    "/{event_id}/cancel",
+    response_model=SOSResolveResponse,
+    summary="Cancel Active SOS Emergency (Alias)",
+    description="Marks an active emergency as resolved.",
+    include_in_schema=False,
 )
 async def resolve_sos(
     event_id: uuid.UUID,

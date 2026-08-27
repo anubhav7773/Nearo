@@ -31,8 +31,7 @@ class AlertService:
     ) -> SOSBroadcastResponse:
         """Create an SOS event, query affected residents in broadcast radius, and broadcast via Redis."""
         point_geom = func.ST_SetSRID(func.ST_MakePoint(float(longitude), float(latitude)), 4326)
-
-        cat_val = emergency_type or "security"
+        cat_val = (emergency_type or "security").lower().strip()
 
         # 1. Create SOSEvent record
         event_id = uuid.uuid4()
@@ -40,7 +39,7 @@ class AlertService:
             id=event_id,
             triggered_by=user_id,
             category=cat_val,
-            description=description,
+            description=description or "Civic SOS Emergency Broadcast",
             location=point_geom,
             initial_location=point_geom,
             current_location=point_geom,
@@ -51,7 +50,7 @@ class AlertService:
         await db.commit()
         await db.refresh(sos_event)
 
-        # 2. Query distinct neighbors reached within spatial radius using PostGIS ST_DWithin
+        # 2. Query distinct verified residents reached within spatial radius using PostGIS
         dispatched_count = 0
         resident_rows = []
         try:
@@ -109,7 +108,7 @@ class AlertService:
             try:
                 from app.services.fcm import FCMService
 
-                sos_title = f"🚨 CIVIC SOS: {emergency_type.upper()} Alert"
+                sos_title = f"🚨 CIVIC SOS: {cat_val.upper()} Alert"
                 sos_body = description or f"A resident within {broadcast_radius_meters}m triggered an emergency alert."
                 await FCMService.send_sos_multicast(
                     tokens=fcm_tokens,
@@ -118,7 +117,7 @@ class AlertService:
                     data={
                         "event": "CIVIC_SOS_ALERT",
                         "sos_id": str(sos_event.id),
-                        "emergency_type": emergency_type,
+                        "emergency_type": cat_val,
                         "latitude": str(latitude),
                         "longitude": str(longitude),
                     },
@@ -137,8 +136,8 @@ class AlertService:
                 {
                     "event": "CIVIC_SOS_ALERT",
                     "sos_id": str(sos_event.id),
-                    "emergency_type": emergency_type,
-                    "description": description,
+                    "emergency_type": cat_val,
+                    "description": description or "Civic SOS Emergency Broadcast",
                     "latitude": latitude,
                     "longitude": longitude,
                     "broadcast_radius_meters": broadcast_radius_meters,
@@ -148,30 +147,39 @@ class AlertService:
                 }
             )
             try:
-                # Publish to global broadcast channel
                 await redis.publish("sos_channel_broadcast", payload)
-                # Also publish to specific pincode channels
                 for pincode in pincodes:
                     await redis.publish(f"sos_channel_{pincode}", payload)
             except Exception:
-                pass  # Do not block SOS creation if pubsub fails
+                pass
 
         created_at_val = (
             sos_event.created_at
             if hasattr(sos_event, "created_at") and isinstance(sos_event.created_at, datetime)
-            else None
+            else datetime.now(timezone.utc)
         )
 
         return SOSBroadcastResponse(
+            id=sos_event.id,
             event_id=sos_event.id,
             sos_id=sos_event.id,
+            user_id=user_id,
+            triggered_by=user_id,
             status="active",
-            category=emergency_type,
+            category=cat_val,
+            emergency_type=cat_val,
+            description=description or "Civic SOS Emergency Broadcast",
+            latitude=float(latitude),
+            longitude=float(longitude),
+            lat=float(latitude),
+            lng=float(longitude),
             broadcast_radius_meters=broadcast_radius_meters,
+            radius_meters=float(broadcast_radius_meters),
             dispatched_count=dispatched_count,
             dispatched_neighbors_count=dispatched_count,
             dispatched_notifications_count=dispatched_count,
             neighbors_alerted=dispatched_count,
+            neighbors_notified=dispatched_count,
             created_at=created_at_val,
         )
 
@@ -254,6 +262,8 @@ class AlertService:
         detail = SOSEventDetail(
             id=active_event.id,
             event_id=active_event.id,
+            sos_id=active_event.id,
+            user_id=active_event.triggered_by,
             triggered_by=active_event.triggered_by,
             category=category_val,
             emergency_type=category_val,
@@ -262,15 +272,79 @@ class AlertService:
             responders_count=active_event.responders_count or 0,
             dispatched_count=nearby_count,
             dispatched_neighbors_count=nearby_count,
+            dispatched_notifications_count=nearby_count,
             neighbors_alerted=nearby_count,
+            neighbors_notified=nearby_count,
             latitude=lat_val,
             longitude=lon_val,
+            lat=lat_val,
+            lng=lon_val,
             distance_meters=0,
             created_at=created_at_val,
             resolved_at=None,
         )
 
         return ActiveSOSResponse(has_active=True, event=detail)
+
+    @staticmethod
+    async def fetch_sos_by_id(
+        db: AsyncSession,
+        event_id: uuid.UUID,
+    ) -> SOSEventDetail:
+        """Fetch a specific SOS event by UUID."""
+        stmt = (
+            select(
+                SOSEvent,
+                func.ST_Y(SOSEvent.current_location).label("latitude"),
+                func.ST_X(SOSEvent.current_location).label("longitude"),
+            )
+            .where(SOSEvent.id == event_id)
+        )
+        res = await db.execute(stmt)
+        row = res.first()
+
+        if not row:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="SOS emergency event not found.",
+            )
+
+        if isinstance(row, (tuple, list)) and len(row) >= 3:
+            sos, lat, lon = row[0], row[1], row[2]
+        else:
+            sos, lat, lon = row, 26.7922, 82.1998
+
+        category_val = getattr(sos, "category", None) or getattr(sos, "emergency_type", "security")
+        lat_val = float(lat) if lat is not None else 26.7922
+        lon_val = float(lon) if lon is not None else 82.1998
+
+        created_at_val = (
+            sos.created_at
+            if hasattr(sos, "created_at") and isinstance(sos.created_at, datetime)
+            else None
+        )
+
+        return SOSEventDetail(
+            id=sos.id,
+            event_id=sos.id,
+            sos_id=sos.id,
+            user_id=sos.triggered_by,
+            triggered_by=sos.triggered_by,
+            category=category_val,
+            emergency_type=category_val,
+            description=sos.description,
+            status=sos.status,
+            responders_count=sos.responders_count or 0,
+            dispatched_count=0,
+            dispatched_neighbors_count=0,
+            neighbors_alerted=0,
+            latitude=lat_val,
+            longitude=lon_val,
+            lat=lat_val,
+            lng=lon_val,
+            created_at=created_at_val,
+            resolved_at=sos.resolved_at,
+        )
 
     @staticmethod
     async def resolve_sos_event(
@@ -316,6 +390,7 @@ class AlertService:
         return SOSResolveResponse(
             success=True,
             event_id=event_id,
+            sos_id=event_id,
             status="resolved",
             resolved_at=resolved_at_val,
         )
@@ -369,6 +444,8 @@ class AlertService:
                 SOSEventDetail(
                     id=sos.id,
                     event_id=sos.id,
+                    sos_id=sos.id,
+                    user_id=sos.triggered_by,
                     triggered_by=sos.triggered_by,
                     category=sos_cat,
                     emergency_type=sos_cat,
@@ -380,6 +457,8 @@ class AlertService:
                     neighbors_alerted=0,
                     latitude=float(lat),
                     longitude=float(lon),
+                    lat=float(lat),
+                    lng=float(lon),
                     distance_meters=int(dist) if dist is not None else None,
                     created_at=created_at_val,
                     resolved_at=sos.resolved_at,
