@@ -53,6 +53,10 @@ class User(Base):
     fcm_token = Column(Text, nullable=True, index=True)
     emergency_contact_phone = Column(String(50), nullable=True)
     emergency_contact_name = Column(String(100), nullable=True)
+    last_location = Column(
+        Geometry(geometry_type="POINT", srid=4326, spatial_index=True),
+        nullable=True,
+    )
     role = Column(
         Enum(
             UserRole,

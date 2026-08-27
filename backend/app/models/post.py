@@ -140,8 +140,22 @@ class Comment(Base):
         nullable=False,
     )
 
+    @property
+    def user_id(self):
+        return self.author_id
+
+    @user_id.setter
+    def user_id(self, value):
+        self.author_id = value
+
     # Relationships
     post = relationship("Post", backref="post_comments")
     author = relationship("User")
 
     __table_args__ = (Index("idx_comments_post_created", post_id, created_at.asc()),)
+
+
+# Alias PostComment to Comment for bidirectional compatibility
+PostComment = Comment
+
+__all__ = ["Post", "PostCategory", "PostUpvote", "Comment", "PostComment"]
