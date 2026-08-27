@@ -87,6 +87,7 @@ docker-compose.override.yml
 *.key
 *.crt
 *.keystore
+!mobile/android/app/release.keystore
 *.jks
 key.properties
 **/android/app/google-services.json
