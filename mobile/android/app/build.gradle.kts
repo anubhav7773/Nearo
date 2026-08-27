@@ -24,15 +24,37 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            val keystoreFile = file("release.keystore")
+            val fallbackKeystore = file("../keystores/release.keystore")
+            if (keystoreFile.exists()) {
+                storeFile = keystoreFile
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            } else if (fallbackKeystore.exists()) {
+                storeFile = fallbackKeystore
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            } else {
+                storeFile = signingConfigs.getByName("debug").storeFile
+                storePassword = signingConfigs.getByName("debug").storePassword
+                keyAlias = signingConfigs.getByName("debug").keyAlias
+                keyPassword = signingConfigs.getByName("debug").keyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // Standard debug keystore signing to prevent keystore missing errors on CI and allow smooth update installs
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             isShrinkResources = false
         }
         debug {
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }
