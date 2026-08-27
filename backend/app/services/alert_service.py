@@ -89,9 +89,9 @@ class AlertService:
                 .join(User, UserLocation.user_id == User.id)
                 .where(
                     func.ST_DWithin(
-                        func.cast(UserLocation.last_known_location, text("geography")),
-                        func.cast(point_geom, text("geography")),
-                        broadcast_radius_meters,
+                        func.ST_Transform(UserLocation.last_known_location, 3857),
+                        func.ST_Transform(point_geom, 3857),
+                        float(broadcast_radius_meters),
                     ),
                     UserLocation.user_id != user_id,
                 )

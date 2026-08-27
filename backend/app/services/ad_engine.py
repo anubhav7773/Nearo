@@ -1,7 +1,7 @@
 import urllib.parse
 from datetime import datetime, timezone
 
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.ad import LocalAd
@@ -19,31 +19,36 @@ class AdEngine:
         limit: int = 5,
     ) -> list[NativeAdResponse]:
         """Fetch active native ads whose target radius covers the user coordinate."""
-        point_geom = func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 4326)
-        now_utc = datetime.now(timezone.utc)
-
-        distance_expr = func.ST_Distance(
-            func.cast(LocalAd.target_center, text("geography")),
-            func.cast(point_geom, text("geography")),
-        ).label("distance_meters")
-
-        stmt = (
-            select(LocalAd, distance_expr)
-            .where(
-                LocalAd.is_active.is_(True),
-                LocalAd.expires_at > now_utc,
-                func.ST_DWithin(
-                    func.cast(LocalAd.target_center, text("geography")),
-                    func.cast(point_geom, text("geography")),
-                    LocalAd.target_radius_meters,
-                ),
+        try:
+            point_geom = func.ST_SetSRID(
+                func.ST_MakePoint(float(longitude), float(latitude)), 4326
             )
-            .order_by(distance_expr.asc())
-            .limit(limit)
-        )
+            now_utc = datetime.now(timezone.utc)
 
-        result = await db.execute(stmt)
-        rows = result.all()
+            distance_expr = func.ST_Distance(
+                func.ST_Transform(LocalAd.target_center, 3857),
+                func.ST_Transform(point_geom, 3857),
+            ).label("distance_meters")
+
+            stmt = (
+                select(LocalAd, distance_expr)
+                .where(
+                    LocalAd.is_active.is_(True),
+                    LocalAd.expires_at > now_utc,
+                    func.ST_DWithin(
+                        func.ST_Transform(LocalAd.target_center, 3857),
+                        func.ST_Transform(point_geom, 3857),
+                        LocalAd.target_radius_meters,
+                    ),
+                )
+                .order_by(distance_expr.asc())
+                .limit(limit)
+            )
+
+            result = await db.execute(stmt)
+            rows = result.all()
+        except Exception:
+            return []
 
         ad_responses: list[NativeAdResponse] = []
         for ad, distance in rows:

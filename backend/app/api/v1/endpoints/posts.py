@@ -99,13 +99,18 @@ async def get_nearby_posts(
         limit=limit,
     )
 
-    # 4. Fetch Native Ads
-    native_ads = await AdEngine.fetch_nearby_active_ads(
-        db=db,
-        latitude=user_lat,
-        longitude=user_lon,
-        limit=5,
-    )
+    # 4. Fetch Native Ads with graceful degradation
+    native_ads = []
+    try:
+        native_ads = await AdEngine.fetch_nearby_active_ads(
+            db=db,
+            latitude=user_lat,
+            longitude=user_lon,
+            limit=5,
+        )
+    except Exception as ad_err:
+        logger.warning(f"Ad fetch failed, continuing without ads: {ad_err}")
+        native_ads = []
 
     # 5. Inject Ads (ad-free for pro_resident tier)
     user_tier = current_user.tier if current_user else None
