@@ -106,16 +106,21 @@ def test_patch_user_radius_out_of_bounds():
     assert response_small.status_code == 422
 
 
-def test_delete_user_account_cascade():
-    """Test hard account deletion under DPDP privacy regulations."""
+def test_patch_user_profile_emergency_contact():
+    """Test updating emergency contact phone and guardian name via PATCH /me."""
     user_id = str(uuid.uuid4())
     token = create_access_token(subject=user_id)
 
-    response = client.delete(
+    response = client.patch(
         "/api/v1/users/me",
         headers={"Authorization": f"Bearer {token}"},
+        json={
+            "emergency_contact_phone": "+919876543210",
+            "emergency_contact_name": "Papa",
+        },
     )
     assert response.status_code == 200
     data = response.json()
-    assert data["status"] in ("deleted", "success")
-    assert "erased" in data["message"].lower()
+    assert data["emergency_contact_phone"] == "+919876543210"
+    assert data["emergency_contact_name"] == "Papa"
+

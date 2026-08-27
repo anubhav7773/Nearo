@@ -20,6 +20,8 @@ class SecureStorageService {
   static const String _keyUserAvatar = 'user_avatar';
   static const String _keyUserTier = 'user_tier';
   static const String _keyRadiusKm = 'user_radius_km';
+  static const String _keyEmergencyContactPhone = 'emergency_contact_phone';
+  static const String _keyEmergencyContactName = 'emergency_contact_name';
 
   // Access Token & Auth Token
   static Future<void> saveAccessToken(String token) async {
@@ -128,6 +130,30 @@ class SecureStorageService {
   static Future<double> getRadiusKm() async {
     final val = await _storage.read(key: _keyRadiusKm);
     return val != null ? (double.tryParse(val) ?? 1.5) : 1.5;
+  }
+
+  // Emergency Guardian Contact
+  static Future<void> saveEmergencyContact({
+    required String phone,
+    required String name,
+  }) async {
+    await Future.wait([
+      _storage.write(key: _keyEmergencyContactPhone, value: phone),
+      _storage.write(key: _keyEmergencyContactName, value: name),
+    ]);
+  }
+
+  static Future<String?> getEmergencyContactPhone() async {
+    return await _storage.read(key: _keyEmergencyContactPhone);
+  }
+
+  static Future<String?> getEmergencyContactName() async {
+    return await _storage.read(key: _keyEmergencyContactName);
+  }
+
+  static Future<bool> hasEmergencyContact() async {
+    final phone = await getEmergencyContactPhone();
+    return phone != null && phone.trim().isNotEmpty;
   }
 
   // Clear Session upon Logout or DPDP Account Purge

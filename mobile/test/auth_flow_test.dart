@@ -8,6 +8,7 @@ import 'package:nearo/features/auth/domain/auth_repository.dart';
 import 'package:nearo/features/auth/presentation/bloc/auth_bloc.dart';
 import 'package:nearo/features/auth/presentation/bloc/auth_event.dart';
 import 'package:nearo/features/auth/presentation/bloc/auth_state.dart';
+import 'package:nearo/features/auth/presentation/screens/emergency_setup_screen.dart';
 import 'package:nearo/features/auth/presentation/screens/login_screen.dart';
 
 /// Stubs the Google SSO round-trip so widget tests never touch the
@@ -307,4 +308,41 @@ void main() {
       expect(repository.signOutCalled, isTrue);
     });
   });
+
+  group('EmergencySetupScreen Onboarding Tests', () {
+    testWidgets('renders header, relation chips, inputs, and actions',
+        (WidgetTester tester) async {
+      sizeViewport(tester);
+      bool completed = false;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: EmergencySetupScreen(onComplete: () => completed = true),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+
+      expect(find.text('Set Emergency Guardian'), findsOneWidget);
+      expect(find.text('Papa'), findsOneWidget);
+      expect(find.text('Maa'), findsOneWidget);
+      expect(find.text('Brother'), findsOneWidget);
+      expect(find.text('Save Guardian & Continue to Nearo'), findsOneWidget);
+      expect(find.textContaining('Skip for now'), findsOneWidget);
+
+      // Select quick relation chip
+      await tester.tap(find.text('Papa'));
+      await tester.pump();
+
+      // Enter 10-digit mobile number
+      await tester.enterText(find.byType(TextFormField).last, '9876543210');
+      await tester.pump();
+
+      // Tap Save
+      await tester.tap(find.text('Save Guardian & Continue to Nearo'));
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(completed, isTrue);
+    });
+  });
 }
+

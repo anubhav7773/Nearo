@@ -13,6 +13,7 @@ from app.schemas.user import (
     UserDeleteResponse,
     UserProfileResponse,
     UserProfileSyncRequest,
+    UserProfileUpdateRequest,
     UserRadiusUpdateRequest,
 )
 
@@ -57,6 +58,8 @@ async def sync_user_profile(
                 email=email,
                 alias_name=alias,
                 avatar_url=payload.avatar_url,
+                emergency_contact_phone=payload.emergency_contact_phone,
+                emergency_contact_name=payload.emergency_contact_name,
                 role=UserRole.RESIDENT,
                 tier=SubscriptionTier.FREE,
                 is_verified=True,
@@ -93,6 +96,14 @@ async def sync_user_profile(
         user.clerk_user_id = payload.clerk_user_id
         updated = True
 
+    if payload.emergency_contact_phone and payload.emergency_contact_phone != user.emergency_contact_phone:
+        user.emergency_contact_phone = payload.emergency_contact_phone.strip()
+        updated = True
+
+    if payload.emergency_contact_name and payload.emergency_contact_name != user.emergency_contact_name:
+        user.emergency_contact_name = payload.emergency_contact_name.strip()
+        updated = True
+
     if updated:
         await db.commit()
         await db.refresh(user)
@@ -123,6 +134,8 @@ async def sync_user_profile(
         radius_km=radius_km,
         tier=user.tier.value if hasattr(user.tier, "value") else str(user.tier),
         is_verified=user.is_verified,
+        emergency_contact_phone=user.emergency_contact_phone,
+        emergency_contact_name=user.emergency_contact_name,
         created_at=created_at_val,
     )
 
@@ -166,6 +179,66 @@ async def get_user_profile_me(
             else str(current_user.tier)
         ),
         is_verified=current_user.is_verified,
+        emergency_contact_phone=current_user.emergency_contact_phone,
+        emergency_contact_name=current_user.emergency_contact_name,
+        created_at=created_at_val,
+    )
+
+
+@router.patch(
+    "/me",
+    response_model=UserProfileResponse,
+    summary="Update Current Resident Profile",
+    description="Updates resident profile metadata including emergency guardian contact.",
+)
+async def update_user_profile_me(
+    payload: UserProfileUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if payload.alias_name is not None:
+        current_user.alias_name = payload.alias_name.strip()
+    if payload.avatar_url is not None:
+        current_user.avatar_url = payload.avatar_url
+    if payload.emergency_contact_phone is not None:
+        current_user.emergency_contact_phone = payload.emergency_contact_phone.strip()
+    if payload.emergency_contact_name is not None:
+        current_user.emergency_contact_name = payload.emergency_contact_name.strip()
+
+    await db.commit()
+    await db.refresh(current_user)
+
+    loc_stmt = select(UserLocation).where(UserLocation.user_id == current_user.id)
+    loc_res = await db.execute(loc_stmt)
+    loc = loc_res.scalar_one_or_none()
+    radius_meters = (
+        loc.preferred_radius_meters
+        if loc and hasattr(loc, "preferred_radius_meters") and loc.preferred_radius_meters
+        else 1500
+    )
+    radius_km = radius_meters / 1000.0
+
+    created_at_val = (
+        current_user.created_at
+        if hasattr(current_user, "created_at") and isinstance(current_user.created_at, datetime)
+        else None
+    )
+
+    return UserProfileResponse(
+        id=current_user.id,
+        clerk_user_id=current_user.clerk_user_id,
+        alias=current_user.alias_name,
+        email=current_user.email,
+        avatar_url=current_user.avatar_url,
+        radius_km=radius_km,
+        tier=(
+            current_user.tier.value
+            if hasattr(current_user.tier, "value")
+            else str(current_user.tier)
+        ),
+        is_verified=current_user.is_verified,
+        emergency_contact_phone=current_user.emergency_contact_phone,
+        emergency_contact_name=current_user.emergency_contact_name,
         created_at=created_at_val,
     )
 
@@ -221,6 +294,8 @@ async def update_user_radius(
             else str(current_user.tier)
         ),
         is_verified=current_user.is_verified,
+        emergency_contact_phone=current_user.emergency_contact_phone,
+        emergency_contact_name=current_user.emergency_contact_name,
         created_at=created_at_val,
     )
 

@@ -51,6 +51,8 @@ class User(Base):
     alias_name = Column(String(50), nullable=False)
     avatar_url = Column(Text, nullable=True)
     fcm_token = Column(Text, nullable=True, index=True)
+    emergency_contact_phone = Column(String(50), nullable=True)
+    emergency_contact_name = Column(String(100), nullable=True)
     role = Column(
         Enum(
             UserRole,

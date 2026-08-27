@@ -1,5 +1,6 @@
 import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../../../core/network/secure_storage.dart';
 
 class OfflineSosHelper {
   static Future<Position?> getBestAvailableLocation() async {
@@ -31,28 +32,54 @@ class OfflineSosHelper {
     String? category,
     double? latitude,
     double? longitude,
+    String? contactName,
   }) {
-    String locationText = 'Location unavailable';
+    String locationText = 'Location unavailable (GPS timeout)';
     if (latitude != null && longitude != null) {
       locationText = 'https://maps.google.com/?q=$latitude,$longitude';
     }
 
-    final alertCategory = category ?? 'General Emergency';
+    final recipientGreeting = (contactName != null && contactName.trim().isNotEmpty)
+        ? 'Dear $contactName,\n'
+        : '';
+    final alertCategory = category ?? 'High Priority Alert';
+
     return 'EMERGENCY ALERT!\n'
-        'Type: $alertCategory\n'
-        'I need immediate assistance at my location:\n$locationText\n\n'
-        '(Sent via Nearo Offline Emergency)';
+        '$recipientGreeting'
+        'I triggered an urgent SOS ($alertCategory).\n'
+        'My current location:\n$locationText\n\n'
+        'Sent automatically via Nearo Offline Emergency.';
   }
 
-  static Future<bool> triggerOfflineSms({
+  static Future<Map<String, String?>> getSavedEmergencyContact() async {
+    final phone = await SecureStorageService.getEmergencyContactPhone();
+    final name = await SecureStorageService.getEmergencyContactName();
+    return {
+      'phone': phone,
+      'name': name,
+    };
+  }
+
+  static Future<bool> hasSavedEmergencyContact() async {
+    return await SecureStorageService.hasEmergencyContact();
+  }
+
+  /// Triggers direct offline emergency SMS to saved guardian phone number
+  static Future<bool> triggerDirectOfflineSms({
     String? category,
     double? latitude,
     double? longitude,
-    String? phoneNumber,
+    String? overridePhone,
+    String? overrideName,
   }) async {
+    // 1. Fetch saved guardian contact or use overrides
+    final savedPhone = overridePhone ?? await SecureStorageService.getEmergencyContactPhone();
+    final savedName = overrideName ?? await SecureStorageService.getEmergencyContactName();
+
     double? lat = latitude;
     double? lng = longitude;
 
+    // 2. Fetch high accuracy current GPS coordinates if not passed
     if (lat == null || lng == null) {
       final position = await getBestAvailableLocation();
       if (position != null) {
@@ -61,16 +88,19 @@ class OfflineSosHelper {
       }
     }
 
+    // 3. Format SMS message body with Google Maps link
     final messageBody = buildSmsBody(
       category: category,
       latitude: lat,
       longitude: lng,
+      contactName: savedName,
     );
 
-    final targetNumber = phoneNumber ?? '';
+    // 4. Construct direct-to-number SMS URI
+    final cleanPhone = (savedPhone ?? '').trim();
     final Uri smsUri = Uri(
       scheme: 'sms',
-      path: targetNumber,
+      path: cleanPhone.isNotEmpty ? cleanPhone : null,
       queryParameters: <String, String>{
         'body': messageBody,
       },
@@ -80,16 +110,32 @@ class OfflineSosHelper {
       if (await canLaunchUrl(smsUri)) {
         return await launchUrl(smsUri, mode: LaunchMode.externalApplication);
       } else {
-        // Fallback for devices that require encoded URL string
-        final fallbackUri = Uri.parse(
-          'sms:$targetNumber?body=${Uri.encodeComponent(messageBody)}',
-        );
+        // Fallback for devices requiring encoded string syntax
+        final fallbackStr = cleanPhone.isNotEmpty
+            ? 'sms:$cleanPhone?body=${Uri.encodeComponent(messageBody)}'
+            : 'sms:?body=${Uri.encodeComponent(messageBody)}';
+        final fallbackUri = Uri.parse(fallbackStr);
         if (await canLaunchUrl(fallbackUri)) {
           return await launchUrl(fallbackUri, mode: LaunchMode.externalApplication);
         }
       }
     } catch (_) {}
     return false;
+  }
+
+  /// Legacy alias maintained for existing call-sites
+  static Future<bool> triggerOfflineSms({
+    String? category,
+    double? latitude,
+    double? longitude,
+    String? phoneNumber,
+  }) async {
+    return await triggerDirectOfflineSms(
+      category: category,
+      latitude: latitude,
+      longitude: longitude,
+      overridePhone: phoneNumber,
+    );
   }
 
   static Future<bool> dialEmergencyServices({String phoneNumber = '112'}) async {

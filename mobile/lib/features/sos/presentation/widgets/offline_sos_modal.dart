@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/colors.dart';
+import '../../../../core/network/secure_storage.dart';
 import '../../utils/offline_sos_helper.dart';
 
-class OfflineSosModal extends StatelessWidget {
+class OfflineSosModal extends StatefulWidget {
   final double latitude;
   final double longitude;
   final String emergencyType;
@@ -35,12 +36,128 @@ class OfflineSosModal extends StatelessWidget {
     );
   }
 
-  void _onSendSms(BuildContext context) {
-    Navigator.pop(context);
-    OfflineSosHelper.triggerOfflineSms(
-      category: emergencyType,
-      latitude: latitude,
-      longitude: longitude,
+  @override
+  State<OfflineSosModal> createState() => _OfflineSosModalState();
+}
+
+class _OfflineSosModalState extends State<OfflineSosModal> {
+  String? _guardianName;
+  String? _guardianPhone;
+  bool _isLoadingContact = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadGuardianContact();
+  }
+
+  Future<void> _loadGuardianContact() async {
+    final phone = await SecureStorageService.getEmergencyContactPhone();
+    final name = await SecureStorageService.getEmergencyContactName();
+    if (mounted) {
+      setState(() {
+        _guardianPhone = phone;
+        _guardianName = name;
+        _isLoadingContact = false;
+      });
+    }
+  }
+
+  Future<void> _onSendSms(BuildContext context) async {
+    if (_guardianPhone == null || _guardianPhone!.trim().isEmpty) {
+      // Prompt user to enter emergency contact quickly
+      final entered = await _showQuickContactDialog(context);
+      if (entered != true) return;
+    }
+
+    if (mounted) {
+      Navigator.pop(context);
+      OfflineSosHelper.triggerDirectOfflineSms(
+        category: widget.emergencyType,
+        latitude: widget.latitude,
+        longitude: widget.longitude,
+      );
+    }
+  }
+
+  Future<bool?> _showQuickContactDialog(BuildContext context) {
+    final phoneController = TextEditingController();
+    final nameController = TextEditingController(text: 'Guardian');
+
+    return showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: const Row(
+          children: [
+            Icon(Icons.shield_outlined, color: AppColors.sosRed, size: 24),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Set Emergency Contact',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Enter your guardian\'s mobile number to auto-fill recipients during emergency SOS.',
+              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: nameController,
+              decoration: InputDecoration(
+                labelText: 'Relation / Name',
+                hintText: 'e.g. Papa, Maa',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                isDense: true,
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: phoneController,
+              keyboardType: TextInputType.phone,
+              decoration: InputDecoration(
+                labelText: 'Mobile Number',
+                hintText: '10-digit number or +91...',
+                prefixText: '+91 ',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                isDense: true,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final raw = phoneController.text.trim().replaceAll(RegExp(r'\D'), '');
+              if (raw.length >= 10) {
+                final formatted = raw.length == 10 ? '+91$raw' : '+$raw';
+                final name = nameController.text.trim().isEmpty ? 'Guardian' : nameController.text.trim();
+                await SecureStorageService.saveEmergencyContact(phone: formatted, name: name);
+                setState(() {
+                  _guardianPhone = formatted;
+                  _guardianName = name;
+                });
+                if (ctx.mounted) Navigator.pop(ctx, true);
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.sosRed,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('Save & Send SMS'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -134,7 +251,7 @@ class OfflineSosModal extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'GPS Lock: ${latitude.toStringAsFixed(4)}° N, ${longitude.toStringAsFixed(4)}° E',
+                      'GPS Lock: ${widget.latitude.toStringAsFixed(4)}° N, ${widget.longitude.toStringAsFixed(4)}° E',
                       style: const TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -147,7 +264,7 @@ class OfflineSosModal extends StatelessWidget {
             ),
             const SizedBox(height: 16),
 
-            // Action 1: Send Emergency SMS with Google Maps Link
+            // Action 1: Send Emergency SMS to Guardian
             Material(
               color: Colors.transparent,
               child: ListTile(
@@ -159,13 +276,17 @@ class OfflineSosModal extends StatelessWidget {
                   backgroundColor: AppColors.sosRedLight,
                   child: Icon(Icons.message, color: AppColors.sosRed),
                 ),
-                title: const Text(
-                  'Send Emergency SMS with GPS Link',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                title: Text(
+                  _guardianPhone != null && _guardianPhone!.isNotEmpty
+                      ? 'Send GPS SMS to ${_guardianName ?? 'Guardian'} ($_guardianPhone)'
+                      : 'Send Emergency SMS with GPS Link',
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
                 ),
-                subtitle: const Text(
-                  'Opens default SMS app with pre-filled coordinates and Google Maps link',
-                  style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                subtitle: Text(
+                  _guardianPhone != null && _guardianPhone!.isNotEmpty
+                      ? 'Opens SMS app directly addressed to $_guardianPhone with Google Maps link'
+                      : 'Opens default SMS app with pre-filled coordinates and Google Maps link',
+                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                 ),
                 trailing: const Icon(Icons.chevron_right, color: AppColors.sosRed),
                 onTap: () => _onSendSms(context),

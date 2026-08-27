@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'core/constants/colors.dart';
 import 'core/network/api_client.dart';
+import 'core/network/secure_storage.dart';
 import 'core/services/fcm_service.dart';
 import 'core/theme/app_theme.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/auth/presentation/bloc/auth_event.dart';
 import 'features/auth/presentation/bloc/auth_state.dart';
+import 'features/auth/presentation/screens/emergency_setup_screen.dart';
 import 'features/auth/presentation/screens/login_screen.dart';
 import 'features/feed/presentation/bloc/feed_bloc.dart';
 import 'features/feed/presentation/screens/directory_screen.dart';
@@ -36,6 +38,7 @@ class _NearoAppState extends State<NearoApp> {
   final AuthBloc _authBloc = AuthBloc();
 
   bool _isAuthenticated = false;
+  bool _hasEmergencyContact = true;
   bool _isCheckingAuth = true;
 
   @override
@@ -43,7 +46,10 @@ class _NearoAppState extends State<NearoApp> {
     super.initState();
     ApiClient().onUnauthorized = () {
       if (mounted) {
-        setState(() => _isAuthenticated = false);
+        setState(() {
+          _isAuthenticated = false;
+          _hasEmergencyContact = true;
+        });
       }
     };
     _authBloc.add(CheckAuthStatus());
@@ -55,8 +61,29 @@ class _NearoAppState extends State<NearoApp> {
     super.dispose();
   }
 
-  void _onLoginSuccess() {
-    setState(() => _isAuthenticated = true);
+  Future<void> _checkEmergencyContact() async {
+    final hasContact = await SecureStorageService.hasEmergencyContact();
+    if (mounted) {
+      setState(() {
+        _hasEmergencyContact = hasContact;
+      });
+    }
+  }
+
+  void _onLoginSuccess() async {
+    final hasContact = await SecureStorageService.hasEmergencyContact();
+    if (mounted) {
+      setState(() {
+        _isAuthenticated = true;
+        _hasEmergencyContact = hasContact;
+      });
+    }
+  }
+
+  void _onEmergencySetupComplete() {
+    setState(() {
+      _hasEmergencyContact = true;
+    });
   }
 
   void _onLogout() {
@@ -76,19 +103,24 @@ class _NearoAppState extends State<NearoApp> {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.lightTheme,
         home: BlocListener<AuthBloc, AuthState>(
-          listener: (context, state) {
-            // AuthLoading is deliberately ignored so LoginScreen keeps rendering
-            // its own inline spinner mid sign-in.
+          listener: (context, state) async {
             if (state is AuthAuthenticated) {
-              setState(() {
-                _isAuthenticated = true;
-                _isCheckingAuth = false;
-              });
+              final hasContact = await SecureStorageService.hasEmergencyContact();
+              if (mounted) {
+                setState(() {
+                  _isAuthenticated = true;
+                  _hasEmergencyContact = hasContact;
+                  _isCheckingAuth = false;
+                });
+              }
             } else if (state is AuthUnauthenticated || state is AuthFailure) {
-              setState(() {
-                _isAuthenticated = false;
-                _isCheckingAuth = false;
-              });
+              if (mounted) {
+                setState(() {
+                  _isAuthenticated = false;
+                  _hasEmergencyContact = true;
+                  _isCheckingAuth = false;
+                });
+              }
             }
           },
           child: _isCheckingAuth
@@ -99,7 +131,9 @@ class _NearoAppState extends State<NearoApp> {
                   ),
                 )
               : _isAuthenticated
-                  ? MainNavigationScreen(onLogout: _onLogout)
+                  ? (!_hasEmergencyContact
+                      ? EmergencySetupScreen(onComplete: _onEmergencySetupComplete)
+                      : MainNavigationScreen(onLogout: _onLogout))
                   : LoginScreen(onLoginSuccess: _onLoginSuccess),
         ),
       ),
