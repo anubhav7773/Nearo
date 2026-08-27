@@ -9,6 +9,8 @@ import 'package:nearo/features/sos/presentation/bloc/sos_event.dart';
 import 'package:nearo/features/sos/presentation/bloc/sos_state.dart';
 import 'package:nearo/features/sos/presentation/screens/active_sos_screen.dart';
 import 'package:nearo/features/sos/presentation/screens/sos_screen.dart';
+import 'package:nearo/features/sos/presentation/widgets/offline_sos_modal.dart';
+import 'package:nearo/features/sos/utils/offline_sos_helper.dart';
 
 class MockSosRepository implements SosRepository {
   bool shouldFail = false;
@@ -91,6 +93,27 @@ void main() {
     });
   });
 
+  group('OfflineSosHelper Tests', () {
+    test('buildSmsBody formats category and Google Maps coordinates link correctly', () {
+      final body = OfflineSosHelper.buildSmsBody(
+        category: 'Medical Emergency',
+        latitude: 26.7922,
+        longitude: 82.1998,
+      );
+
+      expect(body, contains('EMERGENCY ALERT!'));
+      expect(body, contains('Type: Medical Emergency'));
+      expect(body, contains('https://maps.google.com/?q=26.7922,82.1998'));
+      expect(body, contains('(Sent via Nearo Offline Emergency)'));
+    });
+
+    test('buildSmsBody handles null coordinates with fallback text', () {
+      final body = OfflineSosHelper.buildSmsBody(category: 'Fire');
+      expect(body, contains('Type: Fire'));
+      expect(body, contains('Location unavailable'));
+    });
+  });
+
   group('SosBloc Unit Tests', () {
     test('TriggerSosRequested emits SosDispatchingState then SosDispatchedSuccess',
         () async {
@@ -166,8 +189,8 @@ void main() {
     });
   });
 
-  group('Civic SOS Screen & ActiveSosScreen Widget Tests', () {
-    testWidgets('SosScreen renders SOS Hold button and emergency categories',
+  group('Civic SOS Screen, ActiveSosScreen & OfflineSosModal Widget Tests', () {
+    testWidgets('SosScreen renders SOS Hold button, categories, and offline banner',
         (WidgetTester tester) async {
       final mockRepo = MockSosRepository();
 
@@ -198,11 +221,46 @@ void main() {
       expect(find.text('Fire / Electrical Hazard'), findsOneWidget);
       expect(find.text('Security / Harassment'), findsOneWidget);
 
-      // Switch category selection
-      await tester.tap(find.text('Medical Emergency'));
-      await tester.pump(const Duration(milliseconds: 200));
+      // Verify Offline Emergency Banner
+      final bannerFinder = find.text('Offline Emergency Mode: 1-Tap 112 Dial & Direct SMS');
+      expect(bannerFinder, findsOneWidget);
 
-      expect(find.text('Medical Emergency'), findsOneWidget);
+      // Scroll to banner and tap to open Offline Emergency bottom sheet
+      await tester.ensureVisible(bannerFinder);
+      await tester.pump(const Duration(milliseconds: 100));
+      await tester.tap(bannerFinder);
+      await tester.pump(const Duration(milliseconds: 300));
+
+      expect(find.text('Offline Emergency Dispatch'), findsOneWidget);
+      expect(find.text('Send Emergency SMS with GPS Link'), findsOneWidget);
+      expect(find.text('Call 112 Emergency Services'), findsOneWidget);
+    });
+
+    testWidgets('OfflineSosModal renders GPS Lock and 1-tap dial hotlines',
+        (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: OfflineSosModal(
+                latitude: 26.7922,
+                longitude: 82.1998,
+                emergencyType: 'medical',
+              ),
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      expect(find.text('Offline Emergency Dispatch'), findsOneWidget);
+      expect(find.text('GPS Lock: 26.7922° N, 82.1998° E'), findsOneWidget);
+      expect(find.text('Send Emergency SMS with GPS Link'), findsOneWidget);
+      expect(find.text('Call 112 Emergency Services'), findsOneWidget);
+      expect(find.text('112'), findsOneWidget);
+      expect(find.text('108'), findsOneWidget);
+      expect(find.text('100'), findsOneWidget);
     });
 
     testWidgets('ActiveSosScreen renders live broadcast metrics and cancel action',
