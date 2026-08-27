@@ -92,3 +92,37 @@ def test_create_post_with_body_and_lat_lng_aliases():
     data = response.json()
     assert data["status"] == "published"
     assert "id" in data
+
+
+def test_get_post_comments():
+    """Verify GET /api/v1/posts/{post_id}/comments returns 200 and a list."""
+    post_id = str(uuid.uuid4())
+    response = client.get(f"/api/v1/posts/{post_id}/comments")
+    assert response.status_code == 200
+    data = response.json()
+    assert isinstance(data, list)
+
+
+def test_create_post_comment_unauthorized():
+    """Verify creating a comment without auth token returns 401."""
+    post_id = str(uuid.uuid4())
+    response = client.post(
+        f"/api/v1/posts/{post_id}/comments",
+        json={"content": "Great initiative!"},
+    )
+    assert response.status_code == 401
+
+
+def test_create_post_comment_authenticated():
+    """Verify creating a comment with auth token returns 201 or 404."""
+    user_id = str(uuid.uuid4())
+    post_id = str(uuid.uuid4())
+    token = create_access_token(subject=user_id)
+
+    response = client.post(
+        f"/api/v1/posts/{post_id}/comments",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"content": "I noticed this too, reported to municipal office."},
+    )
+    assert response.status_code in (201, 404)
+

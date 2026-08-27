@@ -10,9 +10,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.deps import get_current_user, get_current_user_optional
 from app.core.database import get_db
 from app.core.redis import check_rate_limit, get_redis
-from app.models.post import Post, PostUpvote
+from app.models.post import Comment, Post, PostUpvote
 from app.models.user import User
 from app.schemas.post import (
+    CommentCreate,
+    CommentResponse,
     FeedResponse,
     PostCreate,
     PostCreateResponse,
@@ -299,3 +301,144 @@ async def toggle_post_upvote(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to toggle upvote: {str(err)}",
         )
+
+
+@router.get(
+    "/{post_id}/comments",
+    response_model=list[CommentResponse],
+    summary="Get Post Comments",
+    description="Returns a list of comments for the specified post ordered by created_at ASC including author alias and avatar.",
+)
+async def get_post_comments(
+    post_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    try:
+        stmt = (
+            select(
+                Comment.id,
+                Comment.post_id,
+                Comment.author_id,
+                Comment.content,
+                Comment.created_at,
+                User.alias_name.label("author_alias"),
+                User.avatar_url.label("author_avatar_url"),
+                User.tier.label("author_tier"),
+            )
+            .join(User, Comment.author_id == User.id)
+            .where(Comment.post_id == post_id)
+            .order_by(Comment.created_at.asc())
+        )
+        res = await db.execute(stmt)
+        rows = res.mappings().all()
+
+        comments = []
+        for row in rows:
+            tier_val = (
+                row["author_tier"].value
+                if hasattr(row["author_tier"], "value")
+                else str(row["author_tier"] or "free")
+            )
+            comments.append(
+                CommentResponse(
+                    id=row["id"],
+                    post_id=row["post_id"],
+                    author_id=row["author_id"],
+                    author_alias=row["author_alias"] or "Citizen",
+                    author_avatar_url=row["author_avatar_url"],
+                    author_tier=tier_val,
+                    content=row["content"],
+                    created_at=row["created_at"],
+                )
+            )
+        return comments
+    except Exception as err:
+        logger.error("Failed to fetch comments for post %s: %s", post_id, str(err))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch comments: {str(err)}",
+        )
+
+
+@router.post(
+    "/{post_id}/comments",
+    response_model=CommentResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create Post Comment",
+    description="Inserts comment into comments table, increments comments_count on post, and returns new comment.",
+)
+async def create_post_comment(
+    post_id: uuid.UUID,
+    payload: CommentCreate,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+    redis: Redis | None = Depends(get_redis),
+):
+    # Rate limit check (30 comments / minute)
+    rate_key = f"ratelimit:post_comment:{current_user.id}"
+    if redis:
+        allowed = await check_rate_limit(
+            redis, rate_key, max_requests=30, window_seconds=60
+        )
+        if not allowed:
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Comment rate limit exceeded. Please wait a moment.",
+            )
+
+    try:
+        # 1. Verify post exists
+        post_stmt = select(Post).where(Post.id == post_id)
+        post_res = await db.execute(post_stmt)
+        post = post_res.scalar_one_or_none()
+        if not post:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Post not found",
+            )
+
+        comment_id = uuid.uuid4()
+        now_dt = datetime.now()
+
+        new_comment = Comment(
+            id=comment_id,
+            post_id=post_id,
+            author_id=current_user.id,
+            content=payload.content.strip(),
+            created_at=now_dt,
+            updated_at=now_dt,
+        )
+        db.add(new_comment)
+
+        # 2. Increment comments_count on post
+        if hasattr(post, "comments_count"):
+            post.comments_count = (post.comments_count or 0) + 1
+
+        await db.commit()
+
+        tier_val = (
+            current_user.tier.value
+            if hasattr(current_user.tier, "value")
+            else str(getattr(current_user, "tier", "free") or "free")
+        )
+
+        return CommentResponse(
+            id=comment_id,
+            post_id=post_id,
+            author_id=current_user.id,
+            author_alias=getattr(current_user, "alias_name", None) or "Citizen",
+            author_avatar_url=getattr(current_user, "avatar_url", None),
+            author_tier=tier_val,
+            content=payload.content.strip(),
+            created_at=now_dt,
+        )
+    except HTTPException:
+        raise
+    except Exception as err:
+        await db.rollback()
+        logger.error("Failed to create comment for post %s: %s", post_id, str(err))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to post comment: {str(err)}",
+        )
+

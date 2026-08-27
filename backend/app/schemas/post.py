@@ -106,3 +106,20 @@ class FeedResponse(BaseModel):
     page: int
     total_items: int
     data: list[PostResponse | NativeAdResponse]
+
+
+class CommentCreate(BaseModel):
+    content: str = Field(..., min_length=1, max_length=2000)
+
+
+class CommentResponse(BaseModel):
+    id: uuid.UUID
+    post_id: uuid.UUID
+    author_id: uuid.UUID
+    author_alias: str = "Citizen"
+    author_avatar_url: str | None = None
+    author_tier: str = "free"
+    content: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)

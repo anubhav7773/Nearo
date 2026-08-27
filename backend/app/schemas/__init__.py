@@ -4,6 +4,8 @@ from app.schemas.ad import (
     SubscriptionResponse,
 )
 from app.schemas.post import (
+    CommentCreate,
+    CommentResponse,
     FeedResponse,
     PostCreate,
     PostCreateResponse,
@@ -27,6 +29,8 @@ from app.schemas.user import (
 )
 
 __all__ = [
+    "CommentCreate",
+    "CommentResponse",
     "EmailSendCodeRequest",
     "EmailSendCodeResponse",
     "EmailVerifyCodeRequest",

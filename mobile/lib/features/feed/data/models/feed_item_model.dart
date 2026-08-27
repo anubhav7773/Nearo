@@ -41,7 +41,7 @@ class CommunityPostItem extends FeedItem {
   final String content;
   int upvotes;
   bool isUpvoted;
-  final int commentsCount;
+  int commentsCount;
   final double? latitude;
   final double? longitude;
   final List<String> mediaUrls;

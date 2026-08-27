@@ -104,3 +104,44 @@ class PostUpvote(Base):
     )
 
     __table_args__ = (Index("idx_post_upvotes_post_user", post_id, user_id),)
+
+
+class Comment(Base):
+    __tablename__ = "comments"
+
+    id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+        server_default=text("uuid_generate_v4()"),
+    )
+    post_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("posts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    author_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    content = Column(Text, nullable=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    # Relationships
+    post = relationship("Post", backref="post_comments")
+    author = relationship("User")
+
+    __table_args__ = (Index("idx_comments_post_created", post_id, created_at.asc()),)

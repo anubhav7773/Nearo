@@ -27,6 +27,7 @@ class ApiEndpoints {
   static const String feed = '/posts/feed';
   static const String posts = '/posts';
   static const String createPost = '/posts';
+  static String postComments(String postId) => '/posts/$postId/comments';
 
   // Location & Geofencing
   static const String syncLocation = '/location/sync';

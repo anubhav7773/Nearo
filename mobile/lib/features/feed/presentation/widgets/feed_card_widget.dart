@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../../../core/constants/colors.dart';
 import '../../data/models/feed_item_model.dart';
+import 'comments_sheet.dart';
 
-class CommunityFeedCard extends StatelessWidget {
+class CommunityFeedCard extends StatefulWidget {
   final CommunityPostItem post;
   final VoidCallback onUpvote;
 
@@ -12,6 +14,11 @@ class CommunityFeedCard extends StatelessWidget {
     required this.onUpvote,
   });
 
+  @override
+  State<CommunityFeedCard> createState() => _CommunityFeedCardState();
+}
+
+class _CommunityFeedCardState extends State<CommunityFeedCard> {
   Color _getCategoryColor(String category) {
     switch (category.toLowerCase()) {
       case 'alert':
@@ -42,9 +49,45 @@ class CommunityFeedCard extends StatelessWidget {
     }
   }
 
+  Future<void> _sharePost() async {
+    final titlePart = (widget.post.title != null && widget.post.title!.isNotEmpty)
+        ? '${widget.post.title}\n\n'
+        : '';
+    final String shareText = '''
+📢 Nearo Civic Alert: $titlePart${widget.post.content}
+
+📍 Location: Ayodhya Central (${widget.post.category})
+Shared via Nearo - Your Neighborhood Safety & Civic Network
+''';
+    await Share.share(
+      shareText,
+      subject: widget.post.title ?? 'Nearo Civic Alert',
+    );
+  }
+
+  void _openCommentsSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => CommentsSheet(
+        postId: widget.post.id,
+        postTitle: widget.post.title,
+        onCommentAdded: () {
+          setState(() {
+            widget.post.commentsCount++;
+          });
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final catColor = _getCategoryColor(post.category);
+    final catColor = _getCategoryColor(widget.post.category);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -76,7 +119,7 @@ class CommunityFeedCard extends StatelessWidget {
                     children: [
                       Flexible(
                         child: Text(
-                          post.authorAlias,
+                          widget.post.authorAlias,
                           style: const TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w600,
@@ -102,7 +145,7 @@ class CommunityFeedCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${post.distanceFormatted} · ${post.timeAgoFormatted}',
+                  '${widget.post.distanceFormatted} · ${widget.post.timeAgoFormatted}',
                   style: const TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
@@ -122,7 +165,7 @@ class CommunityFeedCard extends StatelessWidget {
                 border: Border.all(color: catColor.withValues(alpha: 0.2), width: 1),
               ),
               child: Text(
-                _formatCategoryLabel(post.category),
+                _formatCategoryLabel(widget.post.category),
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
@@ -133,9 +176,9 @@ class CommunityFeedCard extends StatelessWidget {
             const SizedBox(height: 8),
 
             // 3. Post Title (Optional)
-            if (post.title != null && post.title!.isNotEmpty) ...[
+            if (widget.post.title != null && widget.post.title!.isNotEmpty) ...[
               Text(
-                post.title!,
+                widget.post.title!,
                 style: const TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.w600,
@@ -148,7 +191,7 @@ class CommunityFeedCard extends StatelessWidget {
 
             // 4. Post Content
             Text(
-              post.content,
+              widget.post.content,
               style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w400,
@@ -164,50 +207,54 @@ class CommunityFeedCard extends StatelessWidget {
             Row(
               children: [
                 InkWell(
-                  onTap: onUpvote,
+                  onTap: widget.onUpvote,
                   borderRadius: BorderRadius.circular(6),
                   child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     child: Row(
                       children: [
                         Icon(
-                          post.isUpvoted ? Icons.arrow_upward : Icons.arrow_upward_outlined,
+                          widget.post.isUpvoted ? Icons.arrow_upward : Icons.arrow_upward_outlined,
                           size: 16,
-                          color: post.isUpvoted ? AppColors.accentBlue : AppColors.textSecondary,
+                          color: widget.post.isUpvoted ? AppColors.accentBlue : AppColors.textSecondary,
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          '${post.upvotes} Upvotes',
+                          '${widget.post.upvotes} Upvotes',
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            color: post.isUpvoted ? AppColors.accentBlue : AppColors.textSecondary,
+                            color: widget.post.isUpvoted ? AppColors.accentBlue : AppColors.textSecondary,
                           ),
                         ),
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(width: 16),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.chat_bubble_outline,
-                        size: 15,
-                        color: AppColors.textSecondary,
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${post.commentsCount} Comments',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
+                const SizedBox(width: 12),
+                InkWell(
+                  onTap: () => _openCommentsSheet(context),
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.chat_bubble_outline,
+                          size: 15,
                           color: AppColors.textSecondary,
                         ),
-                      ),
-                    ],
+                        const SizedBox(width: 4),
+                        Text(
+                          '${widget.post.commentsCount} Comments',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 const Spacer(),
@@ -217,9 +264,10 @@ class CommunityFeedCard extends StatelessWidget {
                     size: 18,
                     color: AppColors.textSecondary,
                   ),
-                  onPressed: () {},
+                  onPressed: _sharePost,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
+                  tooltip: 'Share Alert',
                 ),
               ],
             ),
@@ -229,3 +277,4 @@ class CommunityFeedCard extends StatelessWidget {
     );
   }
 }
+
