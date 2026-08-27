@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 
 from fastapi import HTTPException, status
 from redis.asyncio import Redis
-from sqlalchemy import func, select, text
+from sqlalchemy import String, cast, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.sos import SOSEvent, SOSStatus
@@ -193,7 +193,10 @@ class AlertService:
             )
             .where(
                 SOSEvent.triggered_by == user_id,
-                SOSEvent.status == SOSStatus.ACTIVE,
+                or_(
+                    SOSEvent.status == SOSStatus.ACTIVE,
+                    func.lower(cast(SOSEvent.status, String)) == "active",
+                ),
             )
             .order_by(SOSEvent.created_at.desc())
         )
@@ -305,11 +308,11 @@ class AlertService:
         radius_meters: int = 3000,
     ) -> list[SOSEventDetail]:
         """Fetch all active SOS emergencies within the specified geographic radius."""
-        point_geom = func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 4326)
+        point_geom = func.ST_SetSRID(func.ST_MakePoint(float(longitude), float(latitude)), 4326)
 
         distance_expr = func.ST_Distance(
-            func.cast(SOSEvent.current_location, text("geography")),
-            func.cast(point_geom, text("geography")),
+            func.ST_Transform(SOSEvent.current_location, 3857),
+            func.ST_Transform(point_geom, 3857),
         ).label("distance_meters")
 
         raw_lat = func.ST_Y(SOSEvent.current_location).label("raw_lat")
@@ -318,11 +321,14 @@ class AlertService:
         stmt = (
             select(SOSEvent, distance_expr, raw_lat, raw_lon)
             .where(
-                SOSEvent.status == SOSStatus.ACTIVE,
+                or_(
+                    SOSEvent.status == SOSStatus.ACTIVE,
+                    func.lower(cast(SOSEvent.status, String)) == "active",
+                ),
                 func.ST_DWithin(
-                    func.cast(SOSEvent.current_location, text("geography")),
-                    func.cast(point_geom, text("geography")),
-                    radius_meters,
+                    func.ST_Transform(SOSEvent.current_location, 3857),
+                    func.ST_Transform(point_geom, 3857),
+                    float(radius_meters),
                 ),
             )
             .order_by(SOSEvent.created_at.desc())

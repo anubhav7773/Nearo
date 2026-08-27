@@ -2,7 +2,7 @@ import math
 import random
 import uuid
 
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import String, cast, desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.post import Post
@@ -95,24 +95,23 @@ class GeoService:
             func.ST_MakePoint(float(longitude), float(latitude)), 4326
         )
 
-        # Distance calculation in meters using PostGIS geography casting
+        # Distance calculation in metric meters using EPSG:3857 transform (geometry)
         distance_expr = func.ST_Distance(
-            func.cast(Post.location, text("geography")),
-            func.cast(point_geom, text("geography")),
+            func.ST_Transform(Post.location, 3857),
+            func.ST_Transform(point_geom, 3857),
         ).label("distance_meters")
 
         # Extract raw coordinates for jittering
         raw_lat = func.ST_Y(Post.location).label("raw_lat")
         raw_lon = func.ST_X(Post.location).label("raw_lon")
 
-        # Base query joining author to retrieve profile metadata
-        where_conditions = [
-            func.ST_DWithin(
-                func.cast(Post.location, text("geography")),
-                func.cast(point_geom, text("geography")),
-                float(radius_meters),
-            )
-        ]
+        # Base spatial condition
+        spatial_cond = func.ST_DWithin(
+            func.ST_Transform(Post.location, 3857),
+            func.ST_Transform(point_geom, 3857),
+            float(radius_meters),
+        )
+        where_conditions = [spatial_cond]
 
         if category and category.strip().lower() not in (
             "all",
@@ -136,9 +135,9 @@ class GeoService:
                 cat_val = cat_clean
 
             cat_filters = [
-                func.lower(func.cast(Post.category, text("text"))) == cat_val,
-                func.lower(func.cast(Post.category, text("text"))) == raw_cat,
-                func.lower(func.cast(Post.category, text("text"))) == cat_clean,
+                func.lower(cast(Post.category, String)) == cat_val,
+                func.lower(cast(Post.category, String)) == raw_cat,
+                func.lower(cast(Post.category, String)) == cat_clean,
             ]
             try:
                 cat_enum = PostCategory(cat_val)
@@ -148,6 +147,12 @@ class GeoService:
 
             where_conditions.append(or_(*cat_filters))
 
+        # Direct, highly cacheable count query without subquery wrapping
+        count_query = select(func.count(Post.id)).where(*where_conditions)
+        count_result = await db.execute(count_query)
+        total_count = count_result.scalar_one_or_none() or 0
+
+        # Main Posts Query
         query = (
             select(
                 Post,
@@ -160,20 +165,11 @@ class GeoService:
             )
             .outerjoin(User, or_(Post.author_id == User.id, Post.user_id == User.id))
             .where(*where_conditions)
-        )
-
-        # Total count query for pagination
-        count_query = select(func.count()).select_from(query.subquery())
-        count_result = await db.execute(count_query)
-        total_count = count_result.scalar_one() or 0
-
-        # Execute paginated query with pinning and chronological ordering
-        paginated_query = (
-            query.order_by(Post.is_pinned.desc(), Post.created_at.desc())
+            .order_by(Post.is_pinned.desc(), desc(Post.created_at))
             .offset(offset)
             .limit(limit)
         )
-        results = await db.execute(paginated_query)
+        results = await db.execute(query)
         rows = results.all()
 
         # Batch check user upvotes
