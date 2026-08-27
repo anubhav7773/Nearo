@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../../core/constants/colors.dart';
+import '../../../../core/network/secure_storage.dart';
+import '../../../auth/presentation/screens/phone_verification_screen.dart';
 import '../../utils/offline_sos_helper.dart';
 
 class OfflineSosModal extends StatelessWidget {
@@ -35,7 +37,23 @@ class OfflineSosModal extends StatelessWidget {
     );
   }
 
-  void _onSendSms(BuildContext context) {
+  Future<void> _onSendSms(BuildContext context) async {
+    final phone = await SecureStorageService.getEmergencyContactPhone();
+    if (phone == null || phone.trim().isEmpty) {
+      if (!context.mounted) return;
+      Navigator.pop(context);
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => PhoneVerificationScreen(
+            onVerificationComplete: () {
+              Navigator.of(context).pop();
+            },
+          ),
+        ),
+      );
+      return;
+    }
+    if (!context.mounted) return;
     Navigator.pop(context);
     OfflineSosHelper.triggerOfflineSms(
       category: emergencyType,

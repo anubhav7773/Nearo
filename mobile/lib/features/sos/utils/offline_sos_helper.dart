@@ -1,5 +1,6 @@
 import 'package:geolocator/geolocator.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../../core/network/secure_storage.dart';
 
 class OfflineSosHelper {
   static Future<Position?> getBestAvailableLocation() async {
@@ -75,7 +76,14 @@ class OfflineSosHelper {
       longitude: lng,
     );
 
-    final cleanPhone = (overridePhone ?? '').trim();
+    String cleanPhone = (overridePhone ?? '').trim();
+    if (cleanPhone.isEmpty) {
+      final savedPhone = await SecureStorageService.getEmergencyContactPhone();
+      if (savedPhone != null && savedPhone.trim().isNotEmpty) {
+        cleanPhone = savedPhone.trim();
+      }
+    }
+
     final Uri smsUri = Uri(
       scheme: 'sms',
       path: cleanPhone.isNotEmpty ? cleanPhone : null,

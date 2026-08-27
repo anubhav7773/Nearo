@@ -117,17 +117,38 @@ class SecureStorageService {
     await _storage.write(key: _keyRadiusKm, value: radiusKm.toString());
   }
 
-  // Resident Mobile Number
+  // Resident Mobile Number & Emergency Contact
+  static const String _keyEmergencyContactPhone = 'user_emergency_contact_phone';
+
   static Future<String?> getUserPhone() async {
-    return await _storage.read(key: _keyUserPhone);
+    final phone = await _storage.read(key: _keyUserPhone);
+    if (phone != null && phone.trim().isNotEmpty) return phone.trim();
+    return await _storage.read(key: _keyEmergencyContactPhone);
   }
 
   static Future<void> saveUserPhone(String phone) async {
     await _storage.write(key: _keyUserPhone, value: phone.trim());
+    await _storage.write(key: _keyEmergencyContactPhone, value: phone.trim());
+  }
+
+  static Future<String?> getEmergencyContactPhone() async {
+    final phone = await _storage.read(key: _keyEmergencyContactPhone);
+    if (phone != null && phone.trim().isNotEmpty) return phone.trim();
+    return await getUserPhone();
+  }
+
+  static Future<void> saveEmergencyContactPhone(String phone) async {
+    await _storage.write(key: _keyEmergencyContactPhone, value: phone.trim());
+    await saveUserPhone(phone.trim());
   }
 
   static Future<bool> hasUserPhone() async {
     final phone = await getUserPhone();
+    return phone != null && phone.trim().isNotEmpty;
+  }
+
+  static Future<bool> hasEmergencyContact() async {
+    final phone = await getEmergencyContactPhone();
     return phone != null && phone.trim().isNotEmpty;
   }
 

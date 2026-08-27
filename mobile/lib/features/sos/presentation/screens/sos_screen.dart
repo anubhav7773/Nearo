@@ -4,6 +4,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../../core/constants/colors.dart';
+import '../../../../core/network/secure_storage.dart';
+import '../../../auth/presentation/screens/phone_verification_screen.dart';
 import '../bloc/sos_bloc.dart';
 import '../bloc/sos_event.dart';
 import '../bloc/sos_state.dart';
@@ -152,7 +154,28 @@ class _SosScreenState extends State<SosScreen> with SingleTickerProviderStateMix
     }
   }
 
-  void _triggerSos() {
+  Future<void> _triggerSos() async {
+    final hasPhone = await SecureStorageService.hasUserPhone();
+    if (!hasPhone) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please register your mobile number before broadcasting SOS alerts.'),
+          backgroundColor: AppColors.sosRed,
+        ),
+      );
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => PhoneVerificationScreen(
+            onVerificationComplete: () {
+              Navigator.of(context).pop();
+            },
+          ),
+        ),
+      );
+      return;
+    }
+
     HapticFeedback.heavyImpact();
     setState(() {
       _isHolding = false;
