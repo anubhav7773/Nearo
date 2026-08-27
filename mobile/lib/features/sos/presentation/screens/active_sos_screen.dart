@@ -149,8 +149,10 @@ class _ActiveSosScreenState extends State<ActiveSosScreen>
       builder: (context, state) {
         final timeFormatter = DateFormat('hh:mm:ss a · dd MMM yyyy');
 
-        return WillPopScope(
-          onWillPop: () async {
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) {
+            if (didPop) return;
             // Prevent accidental back navigation while SOS is active without confirmation
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(
@@ -158,7 +160,6 @@ class _ActiveSosScreenState extends State<ActiveSosScreen>
                 duration: Duration(seconds: 2),
               ),
             );
-            return false;
           },
           child: Scaffold(
             backgroundColor: AppColors.background,

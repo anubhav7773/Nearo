@@ -19,10 +19,14 @@ class OfflineSosHelper {
         }
       }
 
-      return await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-        timeLimit: const Duration(seconds: 3),
-      ).catchError((_) async => await Geolocator.getLastKnownPosition());
+      try {
+        return await Geolocator.getCurrentPosition(
+          desiredAccuracy: LocationAccuracy.high,
+          timeLimit: const Duration(seconds: 3),
+        );
+      } catch (_) {
+        return await Geolocator.getLastKnownPosition();
+      }
     } catch (_) {
       return await Geolocator.getLastKnownPosition();
     }

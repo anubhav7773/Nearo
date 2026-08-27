@@ -61,15 +61,6 @@ class _NearoAppState extends State<NearoApp> {
     super.dispose();
   }
 
-  Future<void> _checkEmergencyContact() async {
-    final hasContact = await SecureStorageService.hasEmergencyContact();
-    if (mounted) {
-      setState(() {
-        _hasEmergencyContact = hasContact;
-      });
-    }
-  }
-
   void _onLoginSuccess() async {
     final hasContact = await SecureStorageService.hasEmergencyContact();
     if (mounted) {

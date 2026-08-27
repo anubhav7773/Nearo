@@ -43,7 +43,6 @@ class OfflineSosModal extends StatefulWidget {
 class _OfflineSosModalState extends State<OfflineSosModal> {
   String? _guardianName;
   String? _guardianPhone;
-  bool _isLoadingContact = true;
 
   @override
   void initState() {
@@ -58,20 +57,19 @@ class _OfflineSosModalState extends State<OfflineSosModal> {
       setState(() {
         _guardianPhone = phone;
         _guardianName = name;
-        _isLoadingContact = false;
       });
     }
   }
 
-  Future<void> _onSendSms(BuildContext context) async {
+  Future<void> _onSendSms(BuildContext modalContext) async {
     if (_guardianPhone == null || _guardianPhone!.trim().isEmpty) {
       // Prompt user to enter emergency contact quickly
-      final entered = await _showQuickContactDialog(context);
+      final entered = await _showQuickContactDialog(modalContext);
       if (entered != true) return;
     }
 
-    if (mounted) {
-      Navigator.pop(context);
+    if (modalContext.mounted) {
+      Navigator.pop(modalContext);
       OfflineSosHelper.triggerDirectOfflineSms(
         category: widget.emergencyType,
         latitude: widget.latitude,
