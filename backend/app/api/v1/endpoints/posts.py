@@ -236,13 +236,21 @@ async def create_post(
     description="Atomically increments or decrements post upvotes count and tracks user vote state.",
 )
 async def toggle_post_upvote(
-    post_id: uuid.UUID,
+    post_id: str,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     try:
+        try:
+            post_uuid = uuid.UUID(str(post_id))
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Post not found",
+            )
+
         # 1. Fetch target post
-        post_stmt = select(Post).where(Post.id == post_id)
+        post_stmt = select(Post).where(Post.id == post_uuid)
         post_res = await db.execute(post_stmt)
         post = post_res.scalar_one_or_none()
 
@@ -255,7 +263,7 @@ async def toggle_post_upvote(
         # 2. Check if user already upvoted
         upvote_stmt = select(PostUpvote).where(
             PostUpvote.user_id == current_user.id,
-            PostUpvote.post_id == post_id,
+            PostUpvote.post_id == post_uuid,
         )
         upvote_res = await db.execute(upvote_stmt)
         existing_upvote = upvote_res.scalar_one_or_none()
@@ -275,7 +283,7 @@ async def toggle_post_upvote(
             # Toggle on / add upvote
             new_upvote = PostUpvote(
                 user_id=current_user.id,
-                post_id=post_id,
+                post_id=post_uuid,
             )
             db.add(new_upvote)
             new_count = current_count + 1
@@ -288,7 +296,7 @@ async def toggle_post_upvote(
 
         return PostUpvoteResponse(
             success=True,
-            post_id=post_id,
+            post_id=post_uuid,
             upvotes_count=new_count,
             has_upvoted=has_upvoted,
         )
@@ -310,10 +318,29 @@ async def toggle_post_upvote(
     description="Returns a list of comments for the specified post ordered by created_at ASC including author alias and avatar.",
 )
 async def get_post_comments(
-    post_id: uuid.UUID,
+    post_id: str,
     db: AsyncSession = Depends(get_db),
 ):
     try:
+        try:
+            post_uuid = uuid.UUID(str(post_id))
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Post not found",
+            )
+
+        # 1. Verify post exists
+        post_stmt = select(Post).where(Post.id == post_uuid)
+        post_res = await db.execute(post_stmt)
+        post = post_res.scalar_one_or_none()
+        if not post:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Post not found",
+            )
+
+        # 2. Query comments with outer join on User
         stmt = (
             select(
                 Comment.id,
@@ -325,8 +352,8 @@ async def get_post_comments(
                 User.avatar_url.label("author_avatar_url"),
                 User.tier.label("author_tier"),
             )
-            .join(User, Comment.author_id == User.id)
-            .where(Comment.post_id == post_id)
+            .outerjoin(User, Comment.author_id == User.id)
+            .where(Comment.post_id == post_uuid)
             .order_by(Comment.created_at.asc())
         )
         res = await db.execute(stmt)
@@ -339,19 +366,27 @@ async def get_post_comments(
                 if hasattr(row["author_tier"], "value")
                 else str(row["author_tier"] or "free")
             )
+            alias_val = row["author_alias"] or "Verified Neighbor"
+            avatar_val = row["author_avatar_url"]
             comments.append(
                 CommentResponse(
                     id=row["id"],
                     post_id=row["post_id"],
                     author_id=row["author_id"],
-                    author_alias=row["author_alias"] or "Citizen",
-                    author_avatar_url=row["author_avatar_url"],
+                    user_id=row["author_id"],
+                    author_alias=alias_val,
+                    author_name=alias_val,
+                    author_avatar_url=avatar_val,
+                    author_avatar=avatar_val,
                     author_tier=tier_val,
                     content=row["content"],
                     created_at=row["created_at"],
                 )
             )
+        # Return 200 OK with empty list [] if no comments exist
         return comments
+    except HTTPException:
+        raise
     except Exception as err:
         logger.error("Failed to fetch comments for post %s: %s", post_id, str(err))
         raise HTTPException(
@@ -368,12 +403,20 @@ async def get_post_comments(
     description="Inserts comment into comments table, increments comments_count on post, and returns new comment.",
 )
 async def create_post_comment(
-    post_id: uuid.UUID,
+    post_id: str,
     payload: CommentCreate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     redis: Redis | None = Depends(get_redis),
 ):
+    try:
+        post_uuid = uuid.UUID(str(post_id))
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Post not found",
+        )
+
     # Rate limit check (30 comments / minute)
     rate_key = f"ratelimit:post_comment:{current_user.id}"
     if redis:
@@ -388,7 +431,7 @@ async def create_post_comment(
 
     try:
         # 1. Verify post exists
-        post_stmt = select(Post).where(Post.id == post_id)
+        post_stmt = select(Post).where(Post.id == post_uuid)
         post_res = await db.execute(post_stmt)
         post = post_res.scalar_one_or_none()
         if not post:
@@ -402,7 +445,7 @@ async def create_post_comment(
 
         new_comment = Comment(
             id=comment_id,
-            post_id=post_id,
+            post_id=post_uuid,
             author_id=current_user.id,
             content=payload.content.strip(),
             created_at=now_dt,
@@ -421,13 +464,18 @@ async def create_post_comment(
             if hasattr(current_user.tier, "value")
             else str(getattr(current_user, "tier", "free") or "free")
         )
+        alias_val = getattr(current_user, "alias_name", None) or "Verified Neighbor"
+        avatar_val = getattr(current_user, "avatar_url", None)
 
         return CommentResponse(
             id=comment_id,
-            post_id=post_id,
+            post_id=post_uuid,
             author_id=current_user.id,
-            author_alias=getattr(current_user, "alias_name", None) or "Citizen",
-            author_avatar_url=getattr(current_user, "avatar_url", None),
+            user_id=current_user.id,
+            author_alias=alias_val,
+            author_name=alias_val,
+            author_avatar_url=avatar_val,
+            author_avatar=avatar_val,
             author_tier=tier_val,
             content=payload.content.strip(),
             created_at=now_dt,
@@ -441,4 +489,3 @@ async def create_post_comment(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to post comment: {str(err)}",
         )
-

@@ -43,16 +43,24 @@ class SOSBroadcastResponse(BaseModel):
     dispatched_count: int = 0
     dispatched_neighbors_count: int = 0
     dispatched_notifications_count: int = 0
+    neighbors_alerted: int = 0
     created_at: datetime | None = None
 
     @model_validator(mode="after")
     def populate_aliases(self):
         if not self.sos_id:
             self.sos_id = self.event_id
-        count = self.dispatched_count or self.dispatched_neighbors_count or self.dispatched_notifications_count
+        count = (
+            self.dispatched_count
+            or self.dispatched_neighbors_count
+            or self.dispatched_notifications_count
+            or self.neighbors_alerted
+            or 0
+        )
         self.dispatched_count = count
         self.dispatched_neighbors_count = count
         self.dispatched_notifications_count = count
+        self.neighbors_alerted = count
         return self
 
 
@@ -67,6 +75,7 @@ class SOSEventDetail(BaseModel):
     responders_count: int = 0
     dispatched_count: int = 0
     dispatched_neighbors_count: int = 0
+    neighbors_alerted: int = 0
     latitude: float
     longitude: float
     distance_meters: int | None = None
@@ -79,9 +88,15 @@ class SOSEventDetail(BaseModel):
             self.event_id = self.id
         if not self.category and self.emergency_type:
             self.category = self.emergency_type
-        count = self.dispatched_count or self.dispatched_neighbors_count
+        count = (
+            self.dispatched_count
+            or self.dispatched_neighbors_count
+            or self.neighbors_alerted
+            or 0
+        )
         self.dispatched_count = count
         self.dispatched_neighbors_count = count
+        self.neighbors_alerted = count
         return self
 
     model_config = ConfigDict(from_attributes=True)

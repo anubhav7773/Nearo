@@ -29,8 +29,8 @@ class AlertService:
         longitude: float,
         broadcast_radius_meters: int = 1500,
     ) -> SOSBroadcastResponse:
-        """Create an SOS event, query affected residents in 1,500m radius, and broadcast via Redis."""
-        point_geom = func.ST_SetSRID(func.ST_MakePoint(longitude, latitude), 4326)
+        """Create an SOS event, query affected residents in broadcast radius, and broadcast via Redis."""
+        point_geom = func.ST_SetSRID(func.ST_MakePoint(float(longitude), float(latitude)), 4326)
 
         cat_val = emergency_type or "security"
 
@@ -51,61 +51,54 @@ class AlertService:
         await db.commit()
         await db.refresh(sos_event)
 
-        # 2. Query distinct neighbors reached within 1,500m radius using PostGIS ST_DWithin
+        # 2. Query distinct neighbors reached within spatial radius using PostGIS ST_DWithin
         dispatched_count = 0
-        try:
-            reach_sql = """
-                SELECT COUNT(DISTINCT u.id) AS reach_count
-                FROM public.users u
-                JOIN public.user_locations ul ON ul.user_id = u.id
-                WHERE u.is_active = true
-                  AND u.id != :user_id
-                  AND ST_DWithin(
-                    ul.last_known_location::geography,
-                    ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
-                    :radius_meters
-                  );
-            """
-            reach_res = await db.execute(
-                text(reach_sql),
-                {
-                    "user_id": user_id,
-                    "lng": float(longitude),
-                    "lat": float(latitude),
-                    "radius_meters": int(broadcast_radius_meters),
-                },
-            )
-            reach_row = reach_res.mappings().first()
-            if reach_row and reach_row["reach_count"] is not None:
-                dispatched_count = int(reach_row["reach_count"])
-        except Exception:
-            dispatched_count = 0
-
-        # Query all resident user locations and FCM tokens within 1,500m radius
         resident_rows = []
         try:
             residents_stmt = (
                 select(UserLocation.user_id, UserLocation.pincode, User.fcm_token)
                 .join(User, UserLocation.user_id == User.id)
                 .where(
+                    User.id != user_id,
+                    User.is_active == True,
                     func.ST_DWithin(
                         func.ST_Transform(UserLocation.last_known_location, 3857),
                         func.ST_Transform(point_geom, 3857),
                         float(broadcast_radius_meters),
                     ),
-                    UserLocation.user_id != user_id,
                 )
             )
             result = await db.execute(residents_stmt)
             resident_rows = result.all()
-            if dispatched_count == 0:
-                dispatched_count = len(resident_rows)
+            dispatched_count = len(resident_rows)
         except Exception:
-            resident_rows = []
-
-        # Ensure realistic baseline reach count for community density
-        if dispatched_count == 0:
-            dispatched_count = 24
+            try:
+                reach_sql = """
+                    SELECT COUNT(DISTINCT u.id) AS reach_count
+                    FROM public.users u
+                    JOIN public.user_locations ul ON ul.user_id = u.id
+                    WHERE u.is_active = true
+                      AND u.id != :user_id
+                      AND ST_DWithin(
+                        ul.last_known_location::geography,
+                        ST_SetSRID(ST_MakePoint(:lng, :lat), 4326)::geography,
+                        :radius_meters
+                      );
+                """
+                reach_res = await db.execute(
+                    text(reach_sql),
+                    {
+                        "user_id": user_id,
+                        "lng": float(longitude),
+                        "lat": float(latitude),
+                        "radius_meters": int(broadcast_radius_meters),
+                    },
+                )
+                reach_row = reach_res.mappings().first()
+                if reach_row and reach_row["reach_count"] is not None:
+                    dispatched_count = int(reach_row["reach_count"])
+            except Exception:
+                dispatched_count = 0
 
         # Collect distinct pincodes and registered FCM tokens in the area
         pincodes = list({row[1] for row in resident_rows if row and len(row) > 1 and row[1]})
@@ -150,6 +143,7 @@ class AlertService:
                     "longitude": longitude,
                     "broadcast_radius_meters": broadcast_radius_meters,
                     "dispatched_neighbors_count": dispatched_count,
+                    "neighbors_alerted": dispatched_count,
                     "triggered_at": created_at_iso,
                 }
             )
@@ -174,8 +168,10 @@ class AlertService:
             status="active",
             category=emergency_type,
             broadcast_radius_meters=broadcast_radius_meters,
+            dispatched_count=dispatched_count,
             dispatched_neighbors_count=dispatched_count,
             dispatched_notifications_count=dispatched_count,
+            neighbors_alerted=dispatched_count,
             created_at=created_at_val,
         )
 
@@ -233,6 +229,28 @@ class AlertService:
         lat_val = float(ev_lat) if ev_lat is not None else 26.7922
         lon_val = float(ev_lon) if ev_lon is not None else 82.1998
 
+        # Calculate actual live nearby users count
+        nearby_count = 0
+        try:
+            active_point = func.ST_SetSRID(func.ST_MakePoint(lon_val, lat_val), 4326)
+            count_stmt = (
+                select(func.count(func.distinct(User.id)))
+                .join(UserLocation, UserLocation.user_id == User.id)
+                .where(
+                    User.id != user_id,
+                    User.is_active == True,
+                    func.ST_DWithin(
+                        func.ST_Transform(UserLocation.last_known_location, 3857),
+                        func.ST_Transform(active_point, 3857),
+                        1500.0,
+                    ),
+                )
+            )
+            count_res = await db.execute(count_stmt)
+            nearby_count = count_res.scalar() or 0
+        except Exception:
+            nearby_count = 0
+
         detail = SOSEventDetail(
             id=active_event.id,
             event_id=active_event.id,
@@ -241,8 +259,10 @@ class AlertService:
             emergency_type=category_val,
             description=active_event.description,
             status=active_event.status,
-            responders_count=active_event.responders_count,
-            dispatched_neighbors_count=24,
+            responders_count=active_event.responders_count or 0,
+            dispatched_count=nearby_count,
+            dispatched_neighbors_count=nearby_count,
+            neighbors_alerted=nearby_count,
             latitude=lat_val,
             longitude=lon_val,
             distance_meters=0,
@@ -354,8 +374,10 @@ class AlertService:
                     emergency_type=sos_cat,
                     description=sos.description,
                     status=sos.status,
-                    responders_count=sos.responders_count,
-                    dispatched_neighbors_count=24,
+                    responders_count=sos.responders_count or 0,
+                    dispatched_count=0,
+                    dispatched_neighbors_count=0,
+                    neighbors_alerted=0,
                     latitude=float(lat),
                     longitude=float(lon),
                     distance_meters=int(dist) if dist is not None else None,

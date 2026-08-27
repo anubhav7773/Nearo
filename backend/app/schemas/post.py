@@ -116,10 +116,25 @@ class CommentResponse(BaseModel):
     id: uuid.UUID
     post_id: uuid.UUID
     author_id: uuid.UUID
+    user_id: uuid.UUID | None = None
     author_alias: str = "Citizen"
+    author_name: str | None = None
     author_avatar_url: str | None = None
+    author_avatar: str | None = None
     author_tier: str = "free"
     content: str
     created_at: datetime
+
+    @model_validator(mode="after")
+    def populate_aliases(self):
+        if not self.user_id:
+            self.user_id = self.author_id
+        if not self.author_name:
+            self.author_name = self.author_alias
+        if not self.author_avatar and self.author_avatar_url:
+            self.author_avatar = self.author_avatar_url
+        if not self.author_avatar_url and self.author_avatar:
+            self.author_avatar_url = self.author_avatar
+        return self
 
     model_config = ConfigDict(from_attributes=True)
