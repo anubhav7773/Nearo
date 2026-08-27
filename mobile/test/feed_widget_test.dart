@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:nearo/core/theme/app_theme.dart';
+import 'package:nearo/features/feed/data/models/comment_model.dart';
 import 'package:nearo/features/feed/data/models/feed_item_model.dart';
 import 'package:nearo/features/feed/presentation/widgets/feed_card_widget.dart';
 import 'package:nearo/features/feed/presentation/widgets/sponsored_card_widget.dart';
+import 'package:nearo/features/feed/widgets/comments_sheet.dart';
 
 void main() {
   group('Feed Card Widgets Test Suite', () {
@@ -83,6 +85,49 @@ void main() {
       // Verify WhatsApp CTA Button
       expect(find.text('Chat on WhatsApp'), findsOneWidget);
       expect(find.byIcon(Icons.chat_outlined), findsOneWidget);
+    });
+  });
+
+  group('CommentModel & CommentsSheet Tests', () {
+    test('CommentModel parses API response with aliases correctly', () {
+      final json = {
+        'id': 'comment-uuid-1',
+        'post_id': 'post-uuid-1',
+        'user_id': 'user-uuid-1',
+        'author_name': 'AyodhyaResident_04',
+        'author_avatar': 'https://lh3.googleusercontent.com/photo.png',
+        'author_tier': 'pro_resident',
+        'content': 'Municipal water tank arrived at Gate 1.',
+        'created_at': '2026-08-27T10:00:00.000Z',
+      };
+
+      final model = CommentModel.fromJson(json);
+      expect(model.id, equals('comment-uuid-1'));
+      expect(model.postId, equals('post-uuid-1'));
+      expect(model.authorId, equals('user-uuid-1'));
+      expect(model.authorName, equals('AyodhyaResident_04'));
+      expect(model.authorAvatar, equals('https://lh3.googleusercontent.com/photo.png'));
+      expect(model.content, equals('Municipal water tank arrived at Gate 1.'));
+    });
+
+    testWidgets('CommentsSheet renders header and comment input',
+        (WidgetTester tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: CommentsSheet(
+              postId: 'test-post-1',
+              postTitle: 'Water Supply Update',
+            ),
+          ),
+        ),
+      );
+
+      await tester.pump(const Duration(milliseconds: 500));
+
+      expect(find.text('Comments'), findsOneWidget);
+      expect(find.text('Water Supply Update'), findsOneWidget);
+      expect(find.byType(TextField), findsOneWidget);
     });
   });
 }

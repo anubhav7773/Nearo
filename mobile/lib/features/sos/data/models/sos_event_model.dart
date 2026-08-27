@@ -29,6 +29,9 @@ class SosEventModel {
   bool get isResolved => status.toLowerCase() == 'resolved';
   bool get isCancelled => status.toLowerCase() == 'cancelled';
 
+  int get neighborsAlerted => dispatchedCount;
+  int get neighborsNotified => dispatchedCount;
+
   String get categoryDisplayName {
     switch (category.toLowerCase()) {
       case 'medical':
@@ -76,7 +79,9 @@ class SosEventModel {
     final description = json['description'] as String?;
     final radius = (json['broadcast_radius_meters'] as num?)?.toInt() ?? 1500;
 
-    final count = (json['dispatched_count'] ??
+    final count = (json['neighbors_alerted'] ??
+            json['neighbors_notified'] ??
+            json['dispatched_count'] ??
             json['dispatched_neighbors_count'] ??
             json['dispatched_notifications_count'] ??
             0) as num;
@@ -117,6 +122,7 @@ class SosEventModel {
       'description': description,
       'broadcast_radius_meters': broadcastRadiusMeters,
       'dispatched_count': dispatchedCount,
+      'neighbors_alerted': dispatchedCount,
       'responders_count': respondersCount,
       'created_at': createdAt.toIso8601String(),
       'resolved_at': resolvedAt?.toIso8601String(),

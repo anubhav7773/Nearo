@@ -44,6 +44,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
   }
 
   Future<void> _fetchComments() async {
+    if (!mounted) return;
     setState(() {
       _isLoading = true;
       _errorMessage = null;
@@ -55,23 +56,41 @@ class _CommentsSheetState extends State<CommentsSheet> {
       );
 
       if (response.statusCode == 200 && response.data != null) {
-        final List<dynamic> data = response.data is List ? response.data : [];
-        setState(() {
-          _comments = data
-              .map((json) => CommentModel.fromJson(json as Map<String, dynamic>))
-              .toList();
-          _isLoading = false;
-        });
+        final dynamic raw = response.data;
+        final List<dynamic> list = raw is List ? raw : [];
+        final List<CommentModel> loadedComments = [];
+        for (final item in list) {
+          if (item is Map) {
+            loadedComments.add(
+              CommentModel.fromJson(Map<String, dynamic>.from(item)),
+            );
+          }
+        }
+
+        if (mounted) {
+          setState(() {
+            _comments = loadedComments;
+            _isLoading = false;
+            _errorMessage = null;
+          });
+        }
       } else {
-        setState(() {
-          _isLoading = false;
-        });
+        if (mounted) {
+          setState(() {
+            _comments = [];
+            _isLoading = false;
+            _errorMessage = null;
+          });
+        }
       }
     } catch (e) {
-      setState(() {
-        _isLoading = false;
-        _errorMessage = 'Unable to load comments. Tap to retry.';
-      });
+      debugPrint('Error fetching comments for post ${widget.postId}: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Unable to load comments. Tap to retry.';
+        });
+      }
     }
   }
 
@@ -90,12 +109,25 @@ class _CommentsSheetState extends State<CommentsSheet> {
       );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
-        final newComment = CommentModel.fromJson(response.data as Map<String, dynamic>);
-        setState(() {
-          _comments.add(newComment);
-          _commentController.clear();
-          _isSubmitting = false;
-        });
+        if (response.data is Map) {
+          final newComment = CommentModel.fromJson(
+            Map<String, dynamic>.from(response.data as Map),
+          );
+          if (mounted) {
+            setState(() {
+              _comments.add(newComment);
+              _commentController.clear();
+              _isSubmitting = false;
+              _errorMessage = null;
+            });
+          }
+        } else {
+          if (mounted) {
+            _commentController.clear();
+            setState(() => _isSubmitting = false);
+            _fetchComments();
+          }
+        }
 
         widget.onCommentAdded?.call();
 
@@ -110,20 +142,17 @@ class _CommentsSheetState extends State<CommentsSheet> {
           }
         });
       } else {
-        setState(() {
-          _isSubmitting = false;
-        });
         if (mounted) {
+          setState(() => _isSubmitting = false);
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Failed to post comment. Please try again.')),
           );
         }
       }
     } catch (e) {
-      setState(() {
-        _isSubmitting = false;
-      });
+      debugPrint('Error posting comment: $e');
       if (mounted) {
+        setState(() => _isSubmitting = false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Failed to post comment. Please try again.')),
         );
@@ -322,7 +351,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
               ),
               const SizedBox(height: 6),
               const Text(
-                'Start the conversation and support your neighbors!',
+                'Be the first neighbor to respond!',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 13,
@@ -352,20 +381,23 @@ class _CommentsSheetState extends State<CommentsSheet> {
   }
 
   Widget _buildCommentItem(CommentModel comment) {
+    final avatarUrl = comment.authorAvatarUrl ?? comment.authorAvatar;
+    final alias = comment.authorAlias.isNotEmpty
+        ? comment.authorAlias
+        : (comment.authorName.isNotEmpty ? comment.authorName : 'Neighbor');
+
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         CircleAvatar(
           radius: 17,
           backgroundColor: AppColors.primaryBlue.withValues(alpha: 0.1),
-          backgroundImage: comment.authorAvatarUrl != null
-              ? NetworkImage(comment.authorAvatarUrl!)
+          backgroundImage: avatarUrl != null
+              ? NetworkImage(avatarUrl)
               : null,
-          child: comment.authorAvatarUrl == null
+          child: avatarUrl == null
               ? Text(
-                  comment.authorAlias.isNotEmpty
-                      ? comment.authorAlias[0].toUpperCase()
-                      : 'R',
+                  alias.isNotEmpty ? alias[0].toUpperCase() : 'N',
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -391,7 +423,7 @@ class _CommentsSheetState extends State<CommentsSheet> {
                   children: [
                     Flexible(
                       child: Text(
-                        comment.authorAlias,
+                        alias,
                         style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,

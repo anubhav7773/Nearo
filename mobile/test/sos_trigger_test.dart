@@ -276,7 +276,7 @@ void main() {
         longitude: 82.1998,
         description: 'Urgent medical assistance required at Main Gate',
         broadcastRadiusMeters: 1500,
-        dispatchedCount: 24,
+        dispatchedCount: 12,
         respondersCount: 3,
         createdAt: DateTime.now(),
       );
@@ -298,7 +298,7 @@ void main() {
       expect(find.text('MEDICAL EMERGENCY'), findsOneWidget);
       expect(find.text('Live on Network'), findsOneWidget);
       expect(find.text('Urgent medical assistance required at Main Gate'), findsOneWidget);
-      expect(find.text('24'), findsOneWidget);
+      expect(find.text('12'), findsOneWidget);
       expect(find.text('Neighbors Alerted'), findsOneWidget);
       expect(find.text('1500m'), findsOneWidget);
       expect(find.text('Broadcast Radius'), findsOneWidget);

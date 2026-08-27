@@ -19,18 +19,44 @@ class CommentModel {
     required this.createdAt,
   });
 
+  // Backward compatible getters
+  String get userId => authorId;
+  String get authorName => authorAlias;
+  String? get authorAvatar => authorAvatarUrl;
+
   factory CommentModel.fromJson(Map<String, dynamic> json) {
+    final authorName = (json['author_alias'] ??
+            json['author_name'] ??
+            json['alias_name'] ??
+            json['alias'] ??
+            'Verified Neighbor')
+        .toString();
+
+    final avatar = (json['author_avatar_url'] ??
+            json['author_avatar'] ??
+            json['avatar_url'])
+        ?.toString();
+
+    final tier = (json['author_tier'] ?? json['tier'] ?? 'free').toString();
+
+    DateTime parsedDate = DateTime.now();
+    if (json['created_at'] != null) {
+      parsedDate =
+          DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now();
+    }
+
     return CommentModel(
       id: json['id']?.toString() ?? '',
-      postId: json['post_id']?.toString() ?? '',
-      authorId: json['author_id']?.toString() ?? '',
-      authorAlias: json['author_alias'] as String? ?? 'Resident',
-      authorAvatarUrl: json['author_avatar_url'] as String?,
-      authorTier: json['author_tier'] as String? ?? 'free',
-      content: json['content'] as String? ?? '',
-      createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-          : DateTime.now(),
+      postId:
+          (json['post_id'] ?? json['postId'])?.toString() ?? '',
+      authorId:
+          (json['author_id'] ?? json['user_id'] ?? json['userId'])?.toString() ??
+              '',
+      authorAlias: authorName,
+      authorAvatarUrl: avatar,
+      authorTier: tier,
+      content: json['content']?.toString() ?? '',
+      createdAt: parsedDate,
     );
   }
 
@@ -39,8 +65,11 @@ class CommentModel {
       'id': id,
       'post_id': postId,
       'author_id': authorId,
+      'user_id': authorId,
       'author_alias': authorAlias,
+      'author_name': authorAlias,
       'author_avatar_url': authorAvatarUrl,
+      'author_avatar': authorAvatarUrl,
       'author_tier': authorTier,
       'content': content,
       'created_at': createdAt.toIso8601String(),

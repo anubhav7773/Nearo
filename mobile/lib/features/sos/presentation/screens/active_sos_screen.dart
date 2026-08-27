@@ -318,9 +318,9 @@ class _ActiveSosScreenState extends State<ActiveSosScreen>
                               const Icon(Icons.people_alt_outlined, color: AppColors.primaryBlue, size: 28),
                               const SizedBox(height: 6),
                               Text(
-                                '${_currentEvent.dispatchedCount}',
+                                '${_currentEvent.neighborsAlerted}',
                                 style: const TextStyle(
-                                  fontSize: 22,
+                                  fontSize: 24,
                                   fontWeight: FontWeight.w800,
                                   color: AppColors.textPrimary,
                                 ),
@@ -353,7 +353,7 @@ class _ActiveSosScreenState extends State<ActiveSosScreen>
                               Text(
                                 '${_currentEvent.broadcastRadiusMeters}m',
                                 style: const TextStyle(
-                                  fontSize: 22,
+                                  fontSize: 24,
                                   fontWeight: FontWeight.w800,
                                   color: AppColors.textPrimary,
                                 ),
@@ -401,7 +401,7 @@ class _ActiveSosScreenState extends State<ActiveSosScreen>
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                _currentEvent.formattedCoordinates,
+                                'Exact GPS Lock: ${_currentEvent.latitude.toStringAsFixed(4)}° N, ${_currentEvent.longitude.toStringAsFixed(4)}° E',
                                 style: const TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w700,
