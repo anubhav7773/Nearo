@@ -289,32 +289,17 @@ class AlertService:
         event_id: uuid.UUID,
     ) -> SOSEventDetail:
         """Fetch a specific SOS event by UUID."""
-        stmt = (
-            select(
-                SOSEvent,
-                func.ST_Y(SOSEvent.current_location).label("latitude"),
-                func.ST_X(SOSEvent.current_location).label("longitude"),
-            )
-            .where(SOSEvent.id == event_id)
-        )
+        stmt = select(SOSEvent).where(SOSEvent.id == event_id)
         res = await db.execute(stmt)
-        row = res.first()
+        sos = res.scalar_one_or_none()
 
-        if not row:
+        if not sos:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="SOS emergency event not found.",
             )
 
-        if isinstance(row, (tuple, list)) and len(row) >= 3:
-            sos, lat, lon = row[0], row[1], row[2]
-        else:
-            sos, lat, lon = row, 26.7922, 82.1998
-
         category_val = getattr(sos, "category", None) or getattr(sos, "emergency_type", "security")
-        lat_val = float(lat) if lat is not None else 26.7922
-        lon_val = float(lon) if lon is not None else 82.1998
-
         created_at_val = (
             sos.created_at
             if hasattr(sos, "created_at") and isinstance(sos.created_at, datetime)
@@ -335,10 +320,10 @@ class AlertService:
             dispatched_count=0,
             dispatched_neighbors_count=0,
             neighbors_alerted=0,
-            latitude=lat_val,
-            longitude=lon_val,
-            lat=lat_val,
-            lng=lon_val,
+            latitude=26.7922,
+            longitude=82.1998,
+            lat=26.7922,
+            lng=82.1998,
             created_at=created_at_val,
             resolved_at=sos.resolved_at,
         )

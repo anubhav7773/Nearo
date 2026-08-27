@@ -26,7 +26,10 @@ class SosBloc extends Bloc<SosEvent, SosState> {
     try {
       final activeEvent = await _repository.fetchActiveSos();
       if (activeEvent != null && activeEvent.isActive) {
-        emit(SosActiveState(sosEvent: activeEvent));
+        final ageInHours = DateTime.now().difference(activeEvent.createdAt).inHours;
+        if (ageInHours < 2) {
+          emit(SosActiveState(sosEvent: activeEvent));
+        }
       }
     } catch (_) {}
   }
