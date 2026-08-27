@@ -161,6 +161,12 @@ class SecureStorageService {
     return phone != null && phone.trim().isNotEmpty;
   }
 
+  static Future<void> clearEmergencyContact() async {
+    await _storage.delete(key: _keyEmergencyContactPhone);
+    await _storage.delete(key: _keyEmergencyContactName);
+    await _storage.delete(key: _keyUserPhone);
+  }
+
   static Future<void> setRadiusKm(double radiusKm) async {
     await saveRadiusKm(radiusKm);
   }

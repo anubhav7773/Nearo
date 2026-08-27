@@ -24,6 +24,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _aliasName = 'Resident_User';
   String _userTier = 'free';
   String? _userPhone;
+  String? _emergencyPhone;
+  String? _emergencyName;
   double _radiusMeters = 1500;
   bool _isUpgrading = false;
   bool _isLoading = true;
@@ -40,12 +42,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final tier = await SecureStorageService.getUserTier();
     final radiusKm = await SecureStorageService.getRadiusKm();
     final phone = await SecureStorageService.getUserPhone();
+    final emPhone = await SecureStorageService.getEmergencyContactPhone();
+    final emName = await SecureStorageService.getEmergencyContactName();
 
     if (mounted) {
       setState(() {
         if (alias != null) _aliasName = alias;
         if (tier != null) _userTier = tier;
         _userPhone = phone;
+        _emergencyPhone = emPhone;
+        _emergencyName = emName;
         _radiusMeters = radiusKm * 1000.0;
         _isLoading = false;
       });
@@ -59,6 +65,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final liveTier = liveData['tier'];
         final liveRadius = liveData['radius_km'];
         final livePhone = liveData['phone_number'] ?? liveData['phone'];
+        final liveEmPhone = liveData['emergency_contact_phone'];
+        final liveEmName = liveData['emergency_contact_name'];
 
         setState(() {
           if (liveAlias != null) _aliasName = liveAlias.toString();
@@ -66,6 +74,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           if (livePhone != null && livePhone.toString().isNotEmpty) {
             _userPhone = livePhone.toString();
             SecureStorageService.saveUserPhone(_userPhone!);
+          }
+          if (liveEmPhone != null && liveEmPhone.toString().isNotEmpty) {
+            _emergencyPhone = liveEmPhone.toString();
+            SecureStorageService.saveEmergencyContactPhone(_emergencyPhone!);
+          }
+          if (liveEmName != null && liveEmName.toString().isNotEmpty) {
+            _emergencyName = liveEmName.toString();
+            SecureStorageService.saveEmergencyContactName(_emergencyName!);
           }
           if (liveRadius is num) {
             _radiusMeters = liveRadius.toDouble() * 1000.0;
@@ -380,6 +396,135 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             color: AppColors.textSecondary,
                             height: 1.35,
                           ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // 2b. Primary Emergency Contact Card (Auto-Targeted SOS SMS)
+                  Container(
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: AppColors.surfaceCard,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppColors.borderSubtle),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(6),
+                              decoration: BoxDecoration(
+                                color: AppColors.sosRedLight,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const Icon(
+                                Icons.contact_emergency_rounded,
+                                color: AppColors.sosRed,
+                                size: 18,
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            const Text(
+                              'Emergency Contact',
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            const Spacer(),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: AppColors.sosRed.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: const Text(
+                                'SOS SMS Target',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.sosRed,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          _emergencyName != null && _emergencyName!.isNotEmpty
+                              ? '$_emergencyName (${_getMaskedPhone(_emergencyPhone)})'
+                              : (_emergencyPhone != null && _emergencyPhone!.isNotEmpty
+                                  ? _getMaskedPhone(_emergencyPhone)
+                                  : 'Not configured'),
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.8,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        const Text(
+                          'During offline crises or 1-tap SOS, your exact GPS coordinates are instantly dispatched to this recipient.',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.textSecondary,
+                            height: 1.35,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: ElevatedButton.icon(
+                                onPressed: () {
+                                  Navigator.pushNamed(context, '/emergency-number-setup')
+                                      .then((_) => _loadProfileData());
+                                },
+                                icon: const Icon(Icons.edit, size: 16),
+                                label: Text(
+                                  _emergencyPhone != null && _emergencyPhone!.isNotEmpty
+                                      ? 'Edit Contact'
+                                      : 'Set Emergency Contact',
+                                ),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.sosRed,
+                                  foregroundColor: Colors.white,
+                                  elevation: 0,
+                                ),
+                              ),
+                            ),
+                            if (_emergencyPhone != null && _emergencyPhone!.isNotEmpty) ...[
+                              const SizedBox(width: 8),
+                              OutlinedButton.icon(
+                                onPressed: () async {
+                                  await SecureStorageService.clearEmergencyContact();
+                                  await _loadProfileData();
+                                  if (mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Emergency contact reset. You can set a new contact anytime.'),
+                                        backgroundColor: AppColors.warningOrange,
+                                      ),
+                                    );
+                                  }
+                                },
+                                icon: const Icon(Icons.refresh, size: 16, color: AppColors.sosRed),
+                                label: const Text(
+                                  'Reset',
+                                  style: TextStyle(color: AppColors.sosRed, fontWeight: FontWeight.w600),
+                                ),
+                                style: OutlinedButton.styleFrom(
+                                  side: const BorderSide(color: AppColors.sosRed),
+                                ),
+                              ),
+                            ],
+                          ],
                         ),
                       ],
                     ),
